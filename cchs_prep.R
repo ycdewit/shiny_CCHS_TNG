@@ -42,59 +42,128 @@
 # 2. Run second a version of second
 
 cchs_prep <-
-  function (stata_cchsfile=NULL, stata_bootwts=NULL, r_cchs=NULL, r_bootwts=NULL, includes_bootwts=FALSE, phu_name, peer_group, prov_name) {
+  function (cchsfile, bootwts=NULL, includes_bootwts=FALSE, run_errata=TRUE, 
+            phu_name, peer_group, prov_name, update_progress=NULL) {
 
-  if (!is.null(stata_cchsfile)) {
-    hs1516 <- foreign::read.dta(stata_cchsfile)
-  }
-  else {
-    if (is.null(r_cchs)){
-      stop("Error: must specify one of stata_cchsfile or r_cchsdf")
-      }
-
-    else {
-      hs1516 <- r_cchs
+    if (grepl(".dta", cchsfile, ignore.case=TRUE) == TRUE) {
+      hs1516 <- foreign::read.dta(cchsfile)
+      if (is.function(update_progress)) {
+        update_progress(detail = "Data import")
       }
     }
-
-  if (!phu_name %in% levels(hs1516$GEODVHR4)) {
-    print (levels(hs1516$GEODVHR4))
-    stop("PHU name is not in list of PHUs. See list of PHUs above - must match spelling and case.", call. = FALSE)
-  }
+    else if (grepl(".xlsx", cchsfile, ignore.case=TRUE) == TRUE) {
+      hs1516 <- (stata_cchsfile)
+      if (is.function(update_progress)) {
+        update_progress(detail = "Data import")
+      }
+    }
+    else if (grepl(".sav", cchsfile, ignore.case=TRUE) == TRUE) {
+      hs1516 <- foreign::read.spss(stata_cchsfile, to.data.frame = TRUE)
+      if (is.function(update_progress)) {
+        update_progress(detail = "Data import")
+      }
+    }
+    else if (grepl(".rds", cchsfile, ignore.case=TRUE) == TRUE) {
+      hs1516 <- readRDS(stata_cchsfile)
+      if (is.function(update_progress)) {
+        update_progress(detail = "Data import")
+      }
+    }
     
-  else {
+    else if (grepl(".csv", cchsfile, ignore.case=TRUE) == TRUE) {
+      hs1516 <- utils::read.csv(stata_cchsfile)
+      if (is.function(update_progress)) {
+        update_progress(detail = "Data import")
+      }
+    }
+    
+    else {
+      stop("cchsfile must be a filepath to a STATA, SPSS, R, Excel, or Comma-separated data file (i.e. with a .dta, .sav, .rds, .xlsx, or .csv file extension)")
+    }
+
+    if (!phu_name %in% levels(hs1516$GEODVHR4)) {
+      print (levels(hs1516$GEODVHR4))
+      stop("PHU name is not in list of PHUs. See list of PHUs above - must match spelling and case.", call. = FALSE)
+    }
+    
     if (!peer_group %in% levels(hs1516$GEODVPG)) {
       print (levels(hs1516$GEODVPG))
       stop("Peer group is not in list of peer groups. See list of peer groups above - must match spelling and case.")
     }
-    else {
-      cchs_errata <- cchs_errata(dataframe = hs1516)
-
-      cchs_clean <-
-        cchs_cleanup(
-          dataframe = cchs_errata,
-          phu = phu_name,
-          peer = peer_group)
-
-      
-      if (includes_bootwts==FALSE){
-        if (!is.null(stata_bootwts)) {
-          hs1516_bootwt <- foreign::read.dta(stata_bootwts)
-        }
-        else {
-          if (is.null(r_bootwts)){
-            stop("Must specify one of stata_bootwts or r_bootwts")
-            }
-          else {
-            hs1516_bootwt <- r_bootwts
-            }
-          }
-        cchs_combined <- dplyr::left_join(cchs_clean, hs1516_bootwt, by = c("ONT_ID"))
-      }
-      else{
-        return(cchs_clean)
+    
+    if(run_errata==TRUE) {
+      cchs_indata <- cchs_errata(dataframe = hs1516) 
+      if (is.function(update_progress)) {
+        update_progress(detail = "Errata")
       }
     }
+    else {
+      cchs_indata <- hs1516
+    }
+    
+    cchs_indata <- dplyr::rename_all(cchs_indata, ~stringr::str_to_upper(.))
+    cchs_clean <-
+      cchs_cleanup(
+        dataframe = cchs_indata,
+        phu = phu_name,
+        peer = peer_group)
+    if (is.function(update_progress)) {
+      update_progress(detail = "Basic cleaning")
+    }
+
+    if (includes_bootwts == TRUE){
+      if (grepl(".dta", bootwts, ignore.case=TRUE) == TRUE) {
+        hs1516_bootwt <- foreign::read.dta(stata_cchsfile)
+        
+        if (is.function(update_progress)) {
+          update_progress(detail = "Bootstrap weights import")
+        }
+      }
+      else if (grepl(".xlsx", bootwts, ignore.case=TRUE) == TRUE) {
+        hs1516_bootwt <- (stata_cchsfile)
+        
+        if (is.function(update_progress)) {
+          update_progress(detail = "Bootstrap weights import")
+        }
+      }
+      else if (grepl(".sav", bootwts, ignore.case=TRUE) == TRUE) {
+        hs1516_bootwt <- foreign::read.spss(stata_cchsfile, to.data.frame = TRUE)
+        if (is.function(update_progress)) {
+          update_progress(detail = "Bootstrap weights import")
+        }
+      }
+      else if (grepl(".rds", bootwts, ignore.case=TRUE) == TRUE) {
+        hs1516_bootwt <- readRDS(stata_cchsfile)
+        if (is.function(update_progress)) {
+          update_progress(detail = "Bootstrap weights import")
+        }
+      }
+      
+      else if (grepl(".csv", bootwts, ignore.case=TRUE) == TRUE) {
+        hs1516_bootwt <- utils::read.csv(stata_cchsfile)
+        if (is.function(update_progress)) {
+          update_progress(detail = "Bootstrap weights import")
+        }
+      }
+      
+      else {
+        stop("If includes_bootwts is TRUE, bootwts must be a filepath to a STATA, SPSS, R, Excel, or Comma-separated data file (i.e. with a .dta, .sav, .rds, .xlsx, or .csv file extension)")
+      }
+    
+    hs1516_bootwt <- dplyr::rename_all(hs1516_bootwt, ~stringr::str_to_upper(.))    
+    cchs_output <- dplyr::left_join(cchs_clean, hs1516_bootwt, by = c("ONT_ID"))
+    
+    }
+    
+    else {
+      if (any(stringr::str_detect(names(cchs_clean), "BSW") == TRUE)){
+        cchs_output <- cchs_clean
+      }
+      else {
+        stop("includes_bootwts is TRUE, but file does not contain variables starting with BSW (the bootstrap weight variabls)")
+      }
+    }
+    return(cchs_output)
   }
-}
+  
 

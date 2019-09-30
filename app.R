@@ -1,14 +1,21 @@
-library(shiny)
-library(shinyFiles)
-library(shinyjs)
-library(readxl)
-library(mime)
-library(foreign)
-library(dplyr)
-library(tibble)
-library(stringr)
-library(DT)
+package_list <- c("shiny", "shinyFiles", "shinyjs", "readxl", "foreign", "dplyr", "tibble", "stringr", "DT")
 
+get_packages <- function (packages) {
+    for(package in packages) {
+        if(! require(package, character.only = TRUE)){
+            install.packages(package)
+            require(package, character.only = TRUE)
+        }
+    }
+}
+
+get_packages(package_list)
+
+
+cchs_df <- 
+    if (exists("cchs_data.rds")) {
+        readRDS("cchs_data.rds")
+        }
 
 # Define UI 
 ui <- fluidPage(
@@ -19,7 +26,6 @@ ui <- fluidPage(
         sidebarPanel(
             tabsetPanel(
                 tabPanel("Data",
-                bookmarkButton(),
                 h4("Please select data files"),
                 "Stata files are recommended but other formats will work. You may add new variables to the data file(s) but ", 
                 strong("do not modify any of the original variables"), 
@@ -30,8 +36,8 @@ ui <- fluidPage(
                 textOutput("txt_hs"),
                 br(),
                 radioButtons("boot_yn", label = "Does this file contain the bootstrap weights (1000 variables starting with BSW)?",
-                            choices = list("Yes" = 1, "No" = 2), 
-                            selected = 2),
+                            choices = list("Yes" = TRUE, "No" = FALSE), 
+                            selected = FALSE),
                 shinyFilesButton('bs_file', label='Bootstrap file for CCHS 2015-16', title='Please select a file', multiple=FALSE),
                 textOutput("txt_bs"),
                 textOutput("input_error"),
@@ -87,7 +93,7 @@ ui <- fluidPage(
                 a("Click here",target="_blank",href="additional_vars.xlsx"), "to view data dictionary for additional computed variables.",
                 br(),
                 br(),
-                actionButton("updateButton", "Prepare CCHS Data", width = "100%")
+                actionButton("submit", "Prepare CCHS Data", width = "100%")
                 ),
             tabPanel(
                 "Setup Analysis",
@@ -101,7 +107,7 @@ ui <- fluidPage(
         mainPanel(
             tabsetPanel(
                 tabPanel("Explore Data",
-                         DT::dataTableOutput("mytable")),
+                         DT::dataTableOutput("cchs_df")),
                 tabPanel("Table"),
                 tabPanel("Graph") 
             )
@@ -128,34 +134,73 @@ server <-
             output$txt_bs <- renderText(paste0("Selected file: ",parseFilePaths(volumes, input$bs_file)$datapath))
         })
         
+        observe({
+            if(1 %in% input$clean_options){
+                errata <<- TRUE
+            }
+            
+            if (2 %in% input$clean_options) {
+                include_recode <<- TRUE
+            }
+        })
+        
         observeEvent(input$boot_yn, {
-            if(input$boot_yn==1){
+            if(input$boot_yn==TRUE){
                 hide("bs_file")  # hide is a shinyjs function
                 hide("txt_bs")
+                bs_filepath <- NULL
             }
             else{
                 show("bs_file")  # hide is a shinyjs function
                 show("txt_bs")
+                bs_filepath <- parseFilePaths(volumes, input$bs_file)$datapath
             }
             
         source("cchs_cleanup.R")
         source("cchs_errata.R")
         source("cchs_prep.R")
             
-        observeEvent(input$updateButton, {
+        observeEvent(input$submit, {
             
-            output$mytable = DT::renderDataTable({
-            cchs_prep(
-                stata_cchsfile = parseFilePaths(volumes, input$hs_file)$datapath,
-                stata_bootwts = parseFilePaths(volumes, input$bs_file)$datapath,
-                phu_name = input$select_phu,
-                peer_group = input$select_peer,
-                prov_name = "Ontario")   
-            })
+            # Create a Progress object
+            progress <- shiny::Progress$new()
+            progress$set(message = "Preparing data", detail= "This may take awhile, go stretch your legs or something.", value = 0.1)
+            # Close the progress when this reactive exits (even if there's an error)
+            on.exit(progress$close())
+            
+            update_progress <- function(value = NULL, detail = NULL) {
+                if (is.null(value)) {
+                    value <- progress$getValue()
+                    value <- value + (progress$getMax() - value) / 5
+                }
+                progress$set(value = value, detail = detail)
+            }
+            
+            cchs_df <<-    
+                cchs_prep(
+                    cchsfile = parseFilePaths(volumes, input$hs_file)$datapath,
+                    includes_bootwts = input$boot_yn,
+                    bootwts = bs_filepath,
+                    phu_name = input$select_phu,
+                    peer_group = input$select_peer,
+                    run_errata = errata,
+                    prov_name = "Ontario",
+                    update_progress = update_progress)
+        
+            if (include_recode==TRUE){
+                withProgress(message = "Recoding and creating new variables", value = 1/3, {
+                source(cchs_recode)
+                    incProgress(2/3)
+                cchs_df <- cchs_recode(cchs_df) })
+            }
+        
+            saveRDS(cchs_df,"cchs_data.rds")
         })    
         
-        ## print to console to see how the value of the shinyFiles 
-        ## button changes after clicking and selection
+        output$cchs_df <- DT::renderDataTable({
+            input$submit
+            return(cchs_df)
+        })
         
         ## print to browser
         output$filepaths <- renderPrint({
@@ -167,6 +212,7 @@ server <-
         })
     })
 })
+
 
 # Run the application 
 shinyApp(ui = ui, server = server)
