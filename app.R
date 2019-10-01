@@ -1,4 +1,4 @@
-package_list <- c("shiny", "shinyFiles", "shinyjs", "readxl", "foreign", "dplyr", "tibble", "stringr", "DT")
+package_list <- c("shiny", "shinyFiles", "shinyjs", "readxl", "foreign", "dplyr", "tibble", "stringr", "DT", "forcats")
 
 get_packages <- function (packages) {
     for(package in packages) {
@@ -171,7 +171,7 @@ server <-
             update_progress <- function(value = NULL, detail = NULL) {
                 if (is.null(value)) {
                     value <- progress$getValue()
-                    value <- value + (progress$getMax() - value) / 5
+                    value <- value + (progress$getMax() - value) / 3
                 }
                 progress$set(value = value, detail = detail)
             }
@@ -188,18 +188,19 @@ server <-
                     update_progress = update_progress)
         
             if (include_recode==TRUE){
-                withProgress(message = "Recoding and creating new variables", value = 1/3, {
-                source(cchs_recode)
-                    incProgress(2/3)
-                cchs_df <- cchs_recode(cchs_df) })
-            }
+                update_progress(detail = "Calculating additional variables")
+                source("cchs_recode.R")
+                cchs_df <- cchs_recode(cchs_df)
+                update_progress(detail = "Finishing up")
+                }
         
             saveRDS(cchs_df,"cchs_data.rds")
         })    
         
         output$cchs_df <- DT::renderDataTable({
             input$submit
-            return(cchs_df)
+            withProgress(message = "Rendering data table", value = 0.5, {
+            return(cchs_df)})
         })
         
         ## print to browser

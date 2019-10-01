@@ -156,7 +156,7 @@ cchs_prep <-
     }
     
     else {
-      if (any(stringr::str_detect(names(cchs_clean), "BSW") == TRUE)){
+      if (any(stringr::str_detect(names(cchs_clean), "BSW") == FALSE)){
         cchs_output <- cchs_clean
       }
       else {
