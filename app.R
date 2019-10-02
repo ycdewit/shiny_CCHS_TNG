@@ -11,12 +11,6 @@ get_packages <- function (packages) {
 
 get_packages(package_list)
 
-
-cchs_df <- 
-    if (exists("cchs_data.rds")) {
-        readRDS("cchs_data.rds")
-        }
-
 # Define UI 
 ui <- fluidPage(
     useShinyjs(),
@@ -25,9 +19,10 @@ ui <- fluidPage(
     sidebarLayout(
         sidebarPanel(
             tabsetPanel(
-                tabPanel("Data",
+                tabPanel("Data Options",
+                checkboxInput("load_prev", label = "Load my data from previous session", value = TRUE),
                 h4("Please select data files"),
-                "Stata files are recommended but other formats will work. You may add new variables to the data file(s) but ", 
+                "Current format accepted include SPSS, STATA, R, Excel, and Comma-Separated data files (i.e. with a .dta, .sav, .rds, .xlsx, or .csv file extension). You may add new variables to the data file(s) but ", 
                 strong("do not modify any of the original variables"), 
                 " or this tool may not work.",
                 br(),
@@ -97,10 +92,80 @@ ui <- fluidPage(
                 ),
             tabPanel(
                 "Setup Analysis",
-                img(src = "HPE_LogoH_COL.png", width = 220),
-                checkboxGroupInput("phu", label="Select PHU"),
-                sliderInput("slider1", label = h4("Age Range"), min = 12, 
-                max = 100, value = c(12, 100))
+                strong("Please select the question(s) to analyze."),
+                em("You can select variables either by description or by the name used in the CCHS data. If you have custom variables that you imported in your data, they will not show up in description, but will by name."),
+                selectInput("quest_desc", "Description", choices=NULL, multiple = TRUE),
+                selectInput("quest_name", "CCHS Name", choices=NULL, multiple = TRUE),
+                checkboxInput("crude", strong("Produce Crude Estimates"), TRUE),
+                checkboxInput("stand", strong("Produce Age-Standardized Estimates"), FALSE),
+                hidden(
+                    div(id="std_ag",
+                        hidden(
+                            div(id="std_ag1",
+                    strong("Set Age Group"), br(),
+                    em("Specify the age group for age-standardization"),
+                    splitLayout(
+                        textInput("ag_name1", "Name", "", width="90%"),
+                        numericInput("ag_start1","Start Age", value=12, min=12, max=105, width="90%"), 
+                        numericInput("ag_end1","End Age", value=19, min=12, max=105, width="90%")))),
+                    hidden(
+                        div(id="std_ag2",
+                    splitLayout(
+                        textInput("ag_name2", NULL, "", width="90%"),
+                        numericInput("ag_start2", NULL, value=20, min=12, max=105, width="90%"), 
+                        numericInput("ag_end2", NULL, value=34, min=12, max=105, width="90%")))),
+                    hidden(
+                        div(id="std_ag3",
+                    splitLayout(
+                        textInput("ag_name3", NULL, "", width="90%"),
+                        numericInput("ag_start3", NULL, value=35, min=12, max=105, width="90%"), 
+                        numericInput("ag_end3", NULL, value=49, min=12, max=105, width="90%")))),
+                    hidden(
+                        div(id="std_ag4",
+                    splitLayout(
+                        textInput("ag_name4", NULL, "", width="90%"),
+                        numericInput("ag_start4", NULL, value=50, min=12, max=105, width="90%"), 
+                        numericInput("ag_end4", NULL, value=64, min=12, max=105, width="90%")))),
+                    hidden(
+                        div(id="std_ag5",
+                    splitLayout(
+                        textInput("ag_name5", NULL, "", width="90%"),
+                        numericInput("ag_start5", NULL, value=65, min=12, max=105, width="90%"), 
+                        numericInput("ag_end5", NULL, value=105, min=12, max=105, width="90%")))),
+                    hidden(
+                        div(id="std_ag6",
+                    splitLayout(
+                        textInput("ag_name6", NULL, "", width="90%"),
+                        numericInput("ag_start6", NULL, value=NA, min=12, max=105, width="90%"), 
+                        numericInput("ag_end6", NULL, value=NA, min=12, max=105, width="90%")))),
+                    hidden(
+                        div(id="std_ag7",
+                    splitLayout(
+                        textInput("ag_name7", NULL, "", width="90%"),
+                        numericInput("ag_start7", NULL, value=NA, min=12, max=105, width="90%"), 
+                        numericInput("ag_end7", NULL, value=NA, min=12, max=105, width="90%")))),
+                    hidden(
+                        div(id="std_ag8",
+                    splitLayout(
+                        textInput("ag_name8", NULL, "", width="90%"),
+                        numericInput("ag_start8", NULL, value=NA, min=12, max=105, width="90%"), 
+                        numericInput("ag_end8", NULL, value=NA, min=12, max=105, width="90%")))),
+                    hidden(
+                        div(id="std_ag9",
+                    splitLayout(
+                        textInput("ag_name9", NULL, "", width="90%"),
+                        numericInput("ag_start9", NULL, value=NA, min=12, max=105, width="90%"), 
+                        numericInput("ag_end9", NULL, value=NA, min=12, max=105, width="90%")))),
+                    hidden(
+                        div(id="std_ag10",
+                    splitLayout(
+                        textInput("ag_name10", NULL, "", width="90%"),
+                        numericInput("ag_start10", NULL, value=NA, min=12, max=105, width="90%"), 
+                        numericInput("ag_end10", NULL, value=NA, min=12, max=105, width="90%")))),
+                    actionButton("more_ag","More Age Group Rows"), actionButton("less_ag","Less Age Group Rows")
+                    )),
+                sliderInput("age_range", label = "Age Range", min = 10, 
+                max = 105, value = c(12, 105), step = 10)
                 )
             )
         ),
@@ -121,6 +186,23 @@ ui <- fluidPage(
 server <- 
     
     shinyServer(function(input, output, session) {
+        
+        
+        if (file.exists("cchs_data.rds")){
+            show("load_prev")
+            cchs_df <- readRDS("cchs_data.rds")
+        }
+        else updateCheckboxInput(session, "load_prev", value=FALSE)
+    
+        observe({
+            if(input$load_prev==TRUE){
+                prev_phu <- levels(droplevels(cchs_df[cchs_df$phu=="Yes",]$GEODVHR4))
+                updateSelectInput(session, "select_phu", selected = prev_phu)
+                prev_peer <- levels(droplevels(cchs_df[cchs_df$peer=="Yes",]$GEODVPG))
+                updateSelectInput(session, "select_peer", selected = prev_peer)
+            }
+        })
+        
         volumes <- c(Home = fs::path_home(), "R Installation" = R.home(), getVolumes()())
         shinyFileChoose(input, "hs_file", roots = c(volumes, "wd"="."), defaultRoot = "wd", session = session)
         shinyFileChoose(input, "bs_file", roots = volumes, session = session)
@@ -176,7 +258,7 @@ server <-
                 progress$set(value = value, detail = detail)
             }
             
-            cchs_df <<-    
+            cchs_newdf <<-    
                 cchs_prep(
                     cchsfile = parseFilePaths(volumes, input$hs_file)$datapath,
                     includes_bootwts = input$boot_yn,
@@ -190,18 +272,34 @@ server <-
             if (include_recode==TRUE){
                 update_progress(detail = "Calculating additional variables")
                 source("cchs_recode.R")
-                cchs_df <- cchs_recode(cchs_df)
+                cchs_newdf <- cchs_recode(cchs_newdf)
                 update_progress(detail = "Finishing up")
                 }
         
-            saveRDS(cchs_df,"cchs_data.rds")
+            saveRDS(cchs_newdf, "cchs_data.rds")
         })    
         
         output$cchs_df <- DT::renderDataTable({
             input$submit
-            withProgress(message = "Rendering data table", value = 0.5, {
-            return(cchs_df)})
+            input$load_prev
+            if(input$load_prev==FALSE) {
+                if(!exists("cchs_newdf")) {
+                    cchs_newdf <- data.frame(v1="Please use sidebar to prepare data") %>% rename(`No data found`="v1")
+                    }
+                return(cchs_newdf)
+            }
+            if(!file.exists("cchs_data.rds")) {
+                cchs_df <- data.frame(v1="Please use sidebar to prepare data") %>% rename(`No data found`="v1")
+            }
+            return(cchs_df)
         })
+        
+        if(exists("cchs_newdf")) {
+            ready_df <- cchs_newdf
+        }
+        else if(exists("cchs_df")){
+            ready_df <- cchs_df
+        }
         
         ## print to browser
         output$filepaths <- renderPrint({
@@ -211,6 +309,67 @@ server <-
         output$savefile <- renderPrint({
             parseSavePath(volumes, input$save)
         })
+        
+        age_rows <- 5
+        
+        observeEvent(input$more_ag, {
+            age_rows <<- min(age_rows+1,10)
+        })
+        
+        observeEvent(input$less_ag, {
+            age_rows <<- max(age_rows-1,1)
+        })
+        
+        source("utils.R")
+        source("cchs_table.R")
+        source("cchs_rr.R")
+        
+        observe({
+            input$more_ag
+            input$less_ag
+            
+            if(input$stand==TRUE){
+                
+                show("std_ag")
+            
+                for (i in 1:10) {
+                    if(i<=age_rows){
+                        show(eval(paste0("std_ag",i)))
+                    }
+                    else {
+                        hide(eval(paste0("std_ag",i)))
+                    }
+                    
+                    start_val <- paste0("ag_start",i)
+                    end_val <- paste0("ag_end",i)
+                    group_name <- paste0("ag_name",i)
+                    
+                    if(!is.na(input[[start_val]]) & !is.na(input[[end_val]])){
+                        updateTextInput(session, group_name, value = paste0(input[[start_val]],"-",input[[end_val]]))
+                    }
+                    
+                    if(i==1){
+                    agegrp_starts <<- c(input[[start_val]])
+                    agegrp_ends <<- c(input[[end_val]])
+                    agegrp_names <<- c(input[[group_name]])
+                    }
+                    
+                    else {
+                    agegrp_starts <<- c(agegrp_starts, input[[start_val]])
+                    agegrp_ends <<- c(agegrp_ends, input[[end_val]])
+                    agegrp_names <<- c(agegrp_starts, input[[group_name]])
+                    }
+                    
+                }
+                minage <- min(agegrp_starts, na.rm = TRUE)
+                maxage <- min(agegrp_starts, na.rm = TRUE)
+                updateSliderInput(session, "age_range", value=c(minage, maxage))
+                ready_cchs <<- make_std_agegrp(ready_cchs, agegrp_starts = agegrp_starts, agegrp_ends = agegrp_ends, agegrp_names = agegrp_names)
+                std_pop <<- cchs_can2011(minage = minage, maxage = maxage, agegrp_starts = agegrp_starts, agegrp_ends = agegrp_ends, agegrp_names = agegrp_names) 
+            }
+            
+        })
+
     })
 })
 

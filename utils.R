@@ -1,6 +1,6 @@
 scale100 <- function(x){x*100}
 
-cchs_can2011 <- function(minage=NULL, maxage=NULL, agegrp_starts=NULL) {
+cchs_can2011 <- function(minage=NULL, maxage=NULL, agegrp_starts=NULL, agegrp_ends=NULL, agegrp_names=NULL) {
   
   stdpop <- c(376321, 	379990, 	383179, 	383741, 	375833, 	366757, 	361038, 	363440, 	358621, 	360577, 	
               365198, 	376458, 	379838, 	391245, 	405425, 	426802, 	440145, 	446524, 	455872, 	469609, 	
@@ -33,19 +33,9 @@ cchs_can2011 <- function(minage=NULL, maxage=NULL, agegrp_starts=NULL) {
   }
   
   else{
-    agegrp_starts <- sort(agegrp_starts)
-    
-    ends <- agegrp_starts[agegrp_starts != min(agegrp_starts)] - 1
     
     for (k in seq_along(agegrp_starts)) {
-      
-      if (k != length(agegrp_starts)) {
-        can2011$std_agegrp[can2011$age >= agegrp_starts[k] & can2011$age <= ends[k]] <- paste0(agegrp_starts[k],"-",ends[k])
-      }
-      
-      else {
-        can2011$std_agegrp[can2011$age >= agegrp_starts[k]] <- paste0(agegrp_starts[k],"+")
-      }
+        can2011$std_agegrp[can2011$age >= agegrp_starts[k] & can2011$age <= agegrp_ends[k]] <- agegrp_names[k]
     }
     can2011_grp <- dplyr::group_by(can2011, std_agegrp)
     stdpop <- dplyr::summarize(can2011_grp, stdpop=sum(stdpop))
@@ -53,22 +43,10 @@ cchs_can2011 <- function(minage=NULL, maxage=NULL, agegrp_starts=NULL) {
   return(stdpop)
 }
 
-cchs_agegrp <- function(dataframe, agegrp_starts){
+make_std_agegrp <- function(dataframe, agegrp_starts, agegrp_ends, agegrp_names){
   
-  agegrp_starts <- sort(agegrp_starts)
+  dataframe$std_agegrp[dataframe$DHH_AGE >= agegrp_starts[k] & dataframe$DHH_AGE <= agegrp_ends[k]] <- agegrp_names[k]
   
-  ends <- agegrp_starts[agegrp_starts != min(agegrp_starts)] - 1
-  
-  for (k in seq_along(agegrp_starts)) {
-    
-    if (k != length(agegrp_starts)) {
-      dataframe$std_agegrp[dataframe$DHH_AGE >= agegrp_starts[k] & dataframe$DHH_AGE <= ends[k]] <- paste0(agegrp_starts[k],"-",ends[k])
-    }
-    
-    else {
-      dataframe$std_agegrp[dataframe$DHH_AGE >= agegrp_starts[k]] <- paste0(agegrp_starts[k],"+")
-    }
-  }
   return(dataframe)
 }
 
