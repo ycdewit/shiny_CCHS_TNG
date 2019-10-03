@@ -93,9 +93,8 @@ ui <- fluidPage(
             tabPanel(
                 "Setup Analysis",
                 strong("Please select the question(s) to analyze."),
-                em("You can select variables either by description or by the name used in the CCHS data. If you have custom variables that you imported in your data, they will not show up in description, but will by name."),
-                selectInput("quest_desc", "Description", choices=NULL, multiple = TRUE),
-                selectInput("quest_name", "CCHS Name", choices=NULL, multiple = TRUE),
+                em("start typing in the box below search by either by description or by the name used in the CCHS data (including custom variables you included in your imported data)."),
+                selectizeInput("questions", NULL, NULL, multiple = TRUE, options=list(placeholder = 'No data detected. Please use sidebar to prepare data')),
                 checkboxInput("crude", strong("Produce Crude Estimates"), TRUE),
                 checkboxInput("stand", strong("Produce Age-Standardized Estimates"), FALSE),
                 hidden(
@@ -187,6 +186,8 @@ server <-
     
     shinyServer(function(input, output, session) {
         
+        cchs_var_desc <- read_xlsx("data/CCHS_var_desc.xlsx")%>%
+            select(variable_name, variable_desc)
         
         if (file.exists("cchs_data.rds")){
             show("load_prev")
@@ -277,7 +278,15 @@ server <-
                 }
         
             saveRDS(cchs_newdf, "cchs_data.rds")
-        })    
+        })
+        
+        observe ({
+            if (include_recode==TRUE){
+                cchs_var_desc <<- 
+                    bind_rows(cchs_var_desc, read_xlsx("data/additional variables.xlsx")) %>%
+                    select(variable_name, variable_desc)
+            }
+        })
         
         output$cchs_df <- DT::renderDataTable({
             input$submit
@@ -294,21 +303,22 @@ server <-
             return(cchs_df)
         })
         
-        if(exists("cchs_newdf")) {
-            ready_df <- cchs_newdf
-        }
-        else if(exists("cchs_df")){
-            ready_df <- cchs_df
-        }
-        
-        ## print to browser
-        output$filepaths <- renderPrint({
-            parseFilePaths(volumes, input$file)
+        observe({
+            input$submit
+            input$load_prev
+            
+            if(exists("cchs_newdf")) {
+                ready_cchs <<- cchs_newdf
+            }
+            else if(exists("cchs_df")){
+                ready_cchs <<- cchs_df
+            }
+            else ready_cchs <- NULL
         })
         
-        output$savefile <- renderPrint({
-            parseSavePath(volumes, input$save)
-        })
+        source("utils.R")
+        source("cchs_table.R")
+        source("cchs_rr.R")
         
         age_rows <- 5
         
@@ -319,10 +329,6 @@ server <-
         observeEvent(input$less_ag, {
             age_rows <<- max(age_rows-1,1)
         })
-        
-        source("utils.R")
-        source("cchs_table.R")
-        source("cchs_rr.R")
         
         observe({
             input$more_ag
@@ -369,7 +375,28 @@ server <-
             }
             
         })
-
+        function(dontrun){
+        observe({
+            input$stand
+            input$submit
+            if(!is.null(ready_cchs)){
+            cchs_dd <- 
+                names(ready_cchs) %>%
+                left_join(cchs_var_desc)
+            updateSelectizeInput(session, "questions", choices = cchs_dd$variable_name)
+            }
+        })
+        observe({
+            if(!is.null(input$quest_desc)){
+                if(!is.null(input$quest_name)){
+                    cchs_dd_filter <- 
+                        filter(cchs_dd, variable_desc %in% c(input$quest_desc, input$quest_name))
+                    updateSelectizeInput(session, "questions", selected = cchs_dd_filter$variable_name)}
+                
+                
+                updateSelectInput(session, "quest_desc", choices = cchs_dd$variable_desc)}
+            })
+        }
     })
 })
 

@@ -7,7 +7,17 @@ cchs_recode <-
       rural="GEODVUR2",
       education="EHG2DVR3",
       sex="DHH_SEX",
-      agegrpmh=
+      agegrp_3=
+        as.factor(
+          ifelse(
+            DHH_AGE<=29,
+            "12-29",
+              ifelse(
+                DHH_AGE<=64,
+                "45-64",
+                "65+"
+              ))),
+      agegrp_4b=
         as.factor(
           ifelse(
             DHH_AGE<=19,
@@ -20,7 +30,7 @@ cchs_recode <-
                 "45-64",
                 "65+"
               )))),
-      agegrp4=
+      agegrp_4a=
         as.factor(
           ifelse(
             DHH_AGE<=29,
@@ -33,13 +43,32 @@ cchs_recode <-
                 "50-64",
                 "65+"
               )))),
-      agegrpmh2= as.factor(
+      agegrp_6= as.factor(
         case_when(
           DHH_AGE<=19 ~ "12-19",
           DHH_AGE<=34 ~ "20-34",
           DHH_AGE<=49 ~ "35-49",
           DHH_AGE<=64 ~ "50-64",
           DHH_AGE<=79 ~ "65-79",
+          DHH_AGE>=80 ~ "80+")
+      ),
+      agegrp_5= as.factor(
+        case_when(
+          DHH_AGE<=19 ~ "12-19",
+          DHH_AGE<=34 ~ "20-34",
+          DHH_AGE<=49 ~ "35-49",
+          DHH_AGE<=64 ~ "50-64",
+          DHH_AGE>=65 ~ "65+")
+      ),
+      agegrp_8= as.factor(
+        case_when(
+          DHH_AGE<=19 ~ "12-19",
+          DHH_AGE<=29 ~ "20-29",
+          DHH_AGE<=39 ~ "30-39",
+          DHH_AGE<=49 ~ "40-49",
+          DHH_AGE<=59 ~ "50-59",
+          DHH_AGE<=69 ~ "60-69",
+          DHH_AGE<=79 ~ "70-79",
           DHH_AGE>=80 ~ "80+")
       ),
       ownhome=recode(DHH_OWN,`Owned by member of hhld, even if it is still being paid for`="Owned",`Rented, even if no cash rent is paid`="Rented"),
