@@ -20,7 +20,8 @@ ui <- fluidPage(
         sidebarPanel(
             tabsetPanel(
                 tabPanel("Data Options",
-                checkboxInput("load_prev", label = "Load my data from previous session", value = TRUE),
+                checkboxInput("load_prev", label = "Load data from previous session", value = TRUE),
+                checkboxInput("delete_prev", label = "Delete data from previous session", value = FALSE),
                 h4("Please select data files"),
                 "Current format accepted include SPSS, STATA, R, Excel, and Comma-Separated data files (i.e. with a .dta, .sav, .rds, .xlsx, or .csv file extension). You may add new variables to the data file(s) but ", 
                 strong("do not modify any of the original variables"), 
@@ -93,8 +94,11 @@ ui <- fluidPage(
             tabPanel(
                 "Setup Analysis",
                 strong("Please select the question(s) to analyze."),
-                em("start typing in the box below search by either by description or by the name used in the CCHS data (including custom variables you included in your imported data)."),
-                selectizeInput("questions", NULL, NULL, multiple = TRUE, options=list(placeholder = 'No data detected. Please use sidebar to prepare data')),
+                br(),
+                em("Start typing in the box below search by either by description or by the name used in the CCHS data (including custom variables you included in your imported data)."),
+                selectizeInput("questions", NULL, NULL, multiple = TRUE),
+                strong("Please select any variables you want to group (stratify) the results by."),
+                selectizeInput("stratifiers", NULL, NULL, multiple = TRUE),
                 checkboxInput("crude", strong("Produce Crude Estimates"), TRUE),
                 checkboxInput("stand", strong("Produce Age-Standardized Estimates"), FALSE),
                 hidden(
@@ -164,7 +168,8 @@ ui <- fluidPage(
                     actionButton("more_ag","More Age Group Rows"), actionButton("less_ag","Less Age Group Rows")
                     )),
                 sliderInput("age_range", label = "Age Range", min = 10, 
-                max = 105, value = c(12, 105), step = 10)
+                max = 105, value = c(12, 105), step = 1),
+                actionButton("submit_analysis", "Run", width = "100%")
                 )
             )
         ),
@@ -172,7 +177,11 @@ ui <- fluidPage(
             tabsetPanel(
                 tabPanel("Explore Data",
                          DT::dataTableOutput("cchs_df")),
-                tabPanel("Table"),
+                tabPanel(
+                    "Table", 
+                    verbatimTextOutput("test_qs"),
+                    DT::dataTableOutput("results_table")
+                    ),
                 tabPanel("Graph") 
             )
         )
@@ -186,14 +195,22 @@ server <-
     
     shinyServer(function(input, output, session) {
         
-        cchs_var_desc <- read_xlsx("data/CCHS_var_desc.xlsx")%>%
-            select(variable_name, variable_desc)
-        
         if (file.exists("cchs_data.rds")){
-            show("load_prev")
-            cchs_df <- readRDS("cchs_data.rds")
+            cchs_df <<- readRDS("cchs_data.rds")
         }
-        else updateCheckboxInput(session, "load_prev", value=FALSE)
+        else {
+            updateCheckboxInput(session, "load_prev", value=FALSE)
+            hide("load_prev")
+            hide("delete_prev")}
+        
+        observeEvent(input$delete_prev, {
+            if(input$delete_prev==TRUE){
+                file.remove("cchs_data.rds")
+                updateCheckboxInput(session, "load_prev", value=FALSE)
+                hide("load_prev")
+                hide("delete_prev")
+            }
+        })
     
         observe({
             if(input$load_prev==TRUE){
@@ -211,11 +228,11 @@ server <-
         
         observe({
             output$txt_hs <- renderText(paste0("Selected file: ",parseFilePaths(volumes, input$hs_file)$datapath))
-        })
+        }, priority = -1)
         
         observe({
             output$txt_bs <- renderText(paste0("Selected file: ",parseFilePaths(volumes, input$bs_file)$datapath))
-        })
+        }, priority = -1)
         
         observe({
             if(1 %in% input$clean_options){
@@ -225,19 +242,18 @@ server <-
             if (2 %in% input$clean_options) {
                 include_recode <<- TRUE
             }
-        })
+        }, priority = -1)
         
         observeEvent(input$boot_yn, {
             if(input$boot_yn==TRUE){
                 hide("bs_file")  # hide is a shinyjs function
                 hide("txt_bs")
-                bs_filepath <- NULL
             }
             else{
                 show("bs_file")  # hide is a shinyjs function
                 show("txt_bs")
-                bs_filepath <- parseFilePaths(volumes, input$bs_file)$datapath
             }
+        })
             
         source("cchs_cleanup.R")
         source("cchs_errata.R")
@@ -247,7 +263,7 @@ server <-
             
             # Create a Progress object
             progress <- shiny::Progress$new()
-            progress$set(message = "Preparing data", detail= "This may take awhile, go stretch your legs or something.", value = 0.1)
+            progress$set(message = "Preparing data", detail= "This may take awhile, maybe go stretch your legs or something.", value = 0.1)
             # Close the progress when this reactive exits (even if there's an error)
             on.exit(progress$close())
             
@@ -263,14 +279,14 @@ server <-
                 cchs_prep(
                     cchsfile = parseFilePaths(volumes, input$hs_file)$datapath,
                     includes_bootwts = input$boot_yn,
-                    bootwts = bs_filepath,
+                    bootwts = parseFilePaths(volumes, input$bs_file)$datapath,
                     phu_name = input$select_phu,
                     peer_group = input$select_peer,
                     run_errata = errata,
                     prov_name = "Ontario",
                     update_progress = update_progress)
         
-            if (include_recode==TRUE){
+            if (2 %in% input$clean_options){
                 update_progress(detail = "Calculating additional variables")
                 source("cchs_recode.R")
                 cchs_newdf <- cchs_recode(cchs_newdf)
@@ -278,57 +294,56 @@ server <-
                 }
         
             saveRDS(cchs_newdf, "cchs_data.rds")
-        })
-        
-        observe ({
-            if (include_recode==TRUE){
-                cchs_var_desc <<- 
-                    bind_rows(cchs_var_desc, read_xlsx("data/additional variables.xlsx")) %>%
-                    select(variable_name, variable_desc)
-            }
-        })
+        }, priority = -1)
         
         output$cchs_df <- DT::renderDataTable({
             input$submit
             input$load_prev
-            if(input$load_prev==FALSE) {
-                if(!exists("cchs_newdf")) {
-                    cchs_newdf <- data.frame(v1="Please use sidebar to prepare data") %>% rename(`No data found`="v1")
-                    }
-                return(cchs_newdf)
-            }
-            if(!file.exists("cchs_data.rds")) {
-                cchs_df <- data.frame(v1="Please use sidebar to prepare data") %>% rename(`No data found`="v1")
-            }
-            return(cchs_df)
-        })
-        
-        observe({
-            input$submit
-            input$load_prev
             
-            if(exists("cchs_newdf")) {
-                ready_cchs <<- cchs_newdf
-            }
-            else if(exists("cchs_df")){
-                ready_cchs <<- cchs_df
-            }
-            else ready_cchs <- NULL
+                if(exists("cchs_newdf")) {
+                    cchs_ready <<- cchs_newdf
+                    return(cchs_ready)
+                }
+            
+                else if(input$load_prev==TRUE) {
+                    if(file.exists("cchs_data.rds")){
+                        cchs_ready <<- cchs_df
+                        return(cchs_ready)
+                        }
+                        
+                    else {
+                        cchs_ready <<- NULL
+                        placeholder <- data.frame(v1="Please use sidebar to prepare data") %>% rename(`No data found`="v1")
+                        return(placeholder)
+                    }
+                }
+                else {
+                    cchs_ready <<- NULL
+                    placeholder <- data.frame(v1="Please use sidebar to prepare data") %>% rename(`No data found`="v1")
+                    return(placeholder)
+                }
+                 
         })
         
         source("utils.R")
         source("cchs_table.R")
         source("cchs_rr.R")
         
+        additional_variables <- read_xlsx("data/additional variables.xlsx")
+        
+        cchs_var_desc <- read_xlsx("data/CCHS_var_desc.xlsx") %>%
+            bind_rows(additional_variables) %>%
+            select(variable_name, variable_desc, variable_group)
+        
         age_rows <- 5
         
         observeEvent(input$more_ag, {
             age_rows <<- min(age_rows+1,10)
-        })
+        }, priority = -1)
         
         observeEvent(input$less_ag, {
             age_rows <<- max(age_rows-1,1)
-        })
+        }, priority = -1)
         
         observe({
             input$more_ag
@@ -341,65 +356,116 @@ server <-
                 for (i in 1:10) {
                     if(i<=age_rows){
                         show(eval(paste0("std_ag",i)))
+                    
+                        start_val <- paste0("ag_start",i)
+                        end_val <- paste0("ag_end",i)
+                        group_name <- paste0("ag_name",i)
+                        
+                        if(!is.na(input[[start_val]]) & !is.na(input[[end_val]])){
+                            updateTextInput(session, group_name, value = paste0(input[[start_val]],"-",input[[end_val]]))
+                        }
+                        
+                        if(i==1){
+                        agegrp_starts <<- c(input[[start_val]])
+                        agegrp_ends <<- c(input[[end_val]])
+                        agegrp_names <<- c(input[[group_name]])
+                        }
+                        
+                        else {
+                        agegrp_starts <<- c(agegrp_starts, input[[start_val]])
+                        agegrp_ends <<- c(agegrp_ends, input[[end_val]])
+                        agegrp_names <<- c(agegrp_starts, input[[group_name]])
+                        }
                     }
                     else {
                         hide(eval(paste0("std_ag",i)))
                     }
                     
-                    start_val <- paste0("ag_start",i)
-                    end_val <- paste0("ag_end",i)
-                    group_name <- paste0("ag_name",i)
-                    
-                    if(!is.na(input[[start_val]]) & !is.na(input[[end_val]])){
-                        updateTextInput(session, group_name, value = paste0(input[[start_val]],"-",input[[end_val]]))
-                    }
-                    
-                    if(i==1){
-                    agegrp_starts <<- c(input[[start_val]])
-                    agegrp_ends <<- c(input[[end_val]])
-                    agegrp_names <<- c(input[[group_name]])
-                    }
-                    
-                    else {
-                    agegrp_starts <<- c(agegrp_starts, input[[start_val]])
-                    agegrp_ends <<- c(agegrp_ends, input[[end_val]])
-                    agegrp_names <<- c(agegrp_starts, input[[group_name]])
-                    }
-                    
                 }
                 minage <- min(agegrp_starts, na.rm = TRUE)
-                maxage <- min(agegrp_starts, na.rm = TRUE)
+                maxage <- max(agegrp_ends, na.rm = TRUE)
                 updateSliderInput(session, "age_range", value=c(minage, maxage))
-                ready_cchs <<- make_std_agegrp(ready_cchs, agegrp_starts = agegrp_starts, agegrp_ends = agegrp_ends, agegrp_names = agegrp_names)
+                cchs_ready <<- make_std_agegrp(cchs_ready, agegrp_starts = agegrp_starts, agegrp_ends = agegrp_ends, agegrp_names = agegrp_names)
                 std_pop <<- cchs_can2011(minage = minage, maxage = maxage, agegrp_starts = agegrp_starts, agegrp_ends = agegrp_ends, agegrp_names = agegrp_names) 
             }
             
-        })
-        function(dontrun){
-        observe({
-            input$stand
-            input$submit
-            if(!is.null(ready_cchs)){
-            cchs_dd <- 
-                names(ready_cchs) %>%
-                left_join(cchs_var_desc)
-            updateSelectizeInput(session, "questions", choices = cchs_dd$variable_name)
-            }
-        })
-        observe({
-            if(!is.null(input$quest_desc)){
-                if(!is.null(input$quest_name)){
-                    cchs_dd_filter <- 
-                        filter(cchs_dd, variable_desc %in% c(input$quest_desc, input$quest_name))
-                    updateSelectizeInput(session, "questions", selected = cchs_dd_filter$variable_name)}
-                
-                
-                updateSelectInput(session, "quest_desc", choices = cchs_dd$variable_desc)}
-            })
-        }
-    })
-})
+        }, priority = -1)
 
+        observe({
+            input$submit
+            if(!is.null(cchs_ready)){
+            cchs_dd <<- 
+                data.frame(variable_name = names(cchs_ready), stringsAsFactors = FALSE) %>%
+                left_join(cchs_var_desc)
+            
+            updateSelectizeInput(session, "questions", choices = cchs_dd, options=list(
+              optgroups = lapply(unique(cchs_dd$variable_desc), function(x){
+                  list(value = as.character(x), label = as.character(x))
+              }),
+              optgroupField = "variable_desc",
+              searchField = c("variable_name","variable_desc", "variable_group"),
+              labelField = c("variable_name"),
+              render = I("{
+                        option: function(item, escape) {
+                        return '<div>' + escape(item.variable_name) +'</div>';
+                        }
+                        }")
+            ))
+            
+            updateSelectizeInput(session, "questions", choices = cbind(cchs_dd, value = seq_len(nrow(cchs_dd))), server = TRUE)
+            
+            updateSelectizeInput(session, "stratifiers", choices = cchs_dd, options=list(
+                optgroups = lapply(unique(cchs_dd$variable_desc), function(x){
+                    list(value = as.character(x), label = as.character(x))
+                }),
+                optgroupField = "variable_desc",
+                searchField = c("variable_name","variable_desc", "variable_group"),
+                labelField = "variable_name",
+                render = I("{
+                        option: function(item, escape) {
+                        return '<div>' + escape(item.variable_name) +'</div>';
+                        }
+                        }")
+            ))
+            
+            updateSelectizeInput(session, "stratifiers", choices = cbind(cchs_dd, value = seq_len(nrow(cchs_dd))), server = TRUE)
+        }
+                
+        })
+        
+        observeEvent(input$questions, {
+        output$test_qs <- renderPrint({input$questions}) 
+        })
+        
+        observeEvent(input$submit_analysis, {
+            
+            in_questions <- unlist(cchs_dd[input$questions,"variable_name"])
+            
+            if(!is.null(input$stratifiers)){
+            in_byvars <- unlist(cchs_dd[input$stratifiers,"variable_name"])}
+            else in_byvars <- NULL
+            
+            if(input$stand==TRUE){
+                in_standdata <- std_pop
+                in_standpop <- "stdpop"
+                in_standvar <- "std_agegroup"
+            }
+            else {
+                in_standdata <- NULL
+                in_standpop <- NULL
+                in_standvar <- NULL}
+            
+            output$results_table <- renderDataTable({
+                
+                results <- 
+                    cchs_table(questions = in_questions,
+                               geo_vars = c("phu","peer","prov"),
+                               by_vars = in_byvars,
+                               standardize=input$stand, stand_data=in_standdata, stand_pop=in_standpop, stand_var=in_standvar, 
+                               dataframe = cchs_ready)
+            })
+        }, priority = -1)
+    })
 
 # Run the application 
 shinyApp(ui = ui, server = server)
