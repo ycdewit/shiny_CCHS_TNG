@@ -14,7 +14,7 @@ cchs_recode <-
             "12-29",
               ifelse(
                 DHH_AGE<=64,
-                "45-64",
+                "30-64",
                 "65+"
               ))),
       agegrp_4b=
@@ -71,9 +71,21 @@ cchs_recode <-
           DHH_AGE<=79 ~ "70-79",
           DHH_AGE>=80 ~ "80+")
       ),
+      agegrp_alc=
+        as.factor(
+          ifelse(
+            DHH_AGE<=18,
+            "12-18",
+            ifelse(
+              DHH_AGE<=44,
+              "19-44",
+              ifelse(
+                DHH_AGE<=64,
+                "45-64",
+                "65+"
+              )))),
       ownhome=recode(DHH_OWN,`Owned by member of hhld, even if it is still being paid for`="Owned",`Rented, even if no cash rent is paid`="Rented"),
-      mothertongue=fct_collapse(SDCDVLHM,English=c("English","English and Other"),French=c("French","French and Other"),`English and French`=c("English and French","English, French and Other")),
-      aboriginal=fct_collapse(SDCDVABT,No=c("Non-Aboriginal identity")),
+      mothertongue=fct_collapse(SDCDVFL1,English=c("English","English and Other"),French=c("French","French and Other"),`English and French`=c("English and French","English, French and Other")),
       livingsit=as.factor(ifelse(
         DHHDVLVG %in% c("Single parent living with children","Child living with a single parent","Child living with a single parent and siblings"),
         "Single parent and children",
@@ -92,7 +104,7 @@ cchs_recode <-
       gen_030_rev=fct_collapse(GEN_030,Strong=c("Very strong","Somewhat strong"), Weak=c("Somewhat weak","Very weak")),
       gendvswl_rev=fct_collapse(GENDVSWL,Satisfied=c("Satisfied","Very Satisfied"), `Not Satified`=c("Neither satisfied nor dissatisfied","Dissatisfied","Very Dissatisfied")),
       depdvsev_rev=fct_collapse(DEPDVSEV,`Moderate to severe depression`=c("Moderate depression","Moderately severe depression","Severe depression")),
-      depsev=fct_collapse(depdvsev_rev,`Mild to severe depression`=c("Mild depression","Moderate to severe depression")),
+      dep=fct_collapse(depdvsev_rev,`Mild to severe depression`=c("Mild depression","Moderate to severe depression")),
       smk_agefirst=ifelse(
         SMK_035<=15, "15 or less", ifelse(
           SMK_035<=17, "16-17", ifelse(
@@ -140,15 +152,35 @@ cchs_recode <-
       alc_heavy = ifelse(ALC_010 == "Yes" & ALC_005 == "Yes", ifelse(
         str_detect(ALC_020,"Never|Less than once"),"No", "Yes"),"No"),
       alc_underage = ifelse(DHH_AGE<19, ifelse(ALC_005=="Yes", ifelse(ALC_010=="Yes","Yes","No"), "No"), NA),
-      drg_use_lt=ifelse(
-        DRGDVLCO == 1 | DRGDVLAM == 1 | DRGDVLEX == 1 | DRGDVLHA == 1 | DRGDVLGL == 1 | DRGDVINJ == 1, "Yes",ifelse(
-          DRGDVLCO == 2 & DRGDVLAM == 2 & DRGDVLEX == 2 & DRGDVLHA == 2 & DRGDVLGL == 2 & DRGDVINJ == 2, "No", NA)
-      ),
-      drg_use_yr= ifelse(
-        DRG_025 == 1 | DRG_035 == 1 | DRG_045 == 1 | DRG_055== 1 | DRG_065 == 1 | DRG_075 == 1, "Yes",ifelse(
-          DRG_025 == 2 & DRG_035 == 2 & DRG_045 == 2 & DRG_055 == 2 & DRG_065 == 2 & DRG_075 == 2, "No", NA)
-      ),
-      drguselt=as.factor(ifelse(
+      alc_bingecat = as.factor(ifelse(
+          flag_preg_bf == "Yes", NA, ifelse(
+            !is.na(ALC_020), ifelse(
+              ALC_020 == "Never", "No binge drinking in past year", ifelse(
+                ALC_020 == "Less than once a month", "Less than once a month", "Once a month or more")), 
+            ifelse(
+              ALC_005 == "No"|ALC_010 == "No", "Did not drink in the past year", NA)))),
+      alc_status = 
+        as.factor(ifelse(
+          flag_preg_bf == "Yes", NA, ALCDVTTM
+          ))
+          ,
+      alc_freq =
+        as.factor(ifelse(
+          flag_preg_bf == "Yes", NA, ifelse(
+            !is.na(ALC_015), ifelse(
+              ALC_015=="Less than once a month", "Less than once a month", ifelse(
+                ALC_015 %in% c("Once a month", "2 to 3 times a month"), "1 to 3 times a month", ifelse(
+                  ALC_015 %in% c("Once a week", "2 to 3 times a week"), "1 to 3 times a week", ifelse(
+                    ALC_015 %in% c("4 to 6 times a week", "Every day"), "More than 3 times a week", NA)))), 
+            ifelse(
+              ALC_005=="No", "No alcoholic drinks (lifetime)", ifelse(
+                ALC_005=="Yes" & ALC_010=="No", "No alcoholic drinks in past year", NA
+              )
+            )
+          )
+        )
+        ),
+      drguse_lt=as.factor(ifelse(
         DRGDVLCO == "Has used cocaine or crack" | DRGDVLAM == "Has used amphetamines" | DRGDVLEX == "Has used MDMA (ecstasy)" | 
           DRGDVLHA == "Has used hallucinogens, PCP, or LSD"| DRGDVLGL =="Has sniffed glue, gasoline or other solvents" | DRGDVINJ == "Has injected drugs", "Has used illicit drugs",ifelse(
             DRGDVLCO == "Has never used cocaine or crack" | DRGDVLAM == "Has never used amphetamines" | DRGDVLEX == "Has never used MDMA (ecstasy)" | 
@@ -190,19 +222,6 @@ cchs_recode <-
         sui_attempt_age<49 ~ "30-49",
         sui_attempt_age<64 ~ "50-64",
         sui_attempt_age<91 ~ "65+")),
-      agegrp_alc=
-        as.factor(
-          ifelse(
-            DHH_AGE<=18,
-            "12-18",
-            ifelse(
-              DHH_AGE<=44,
-              "19-44",
-              ifelse(
-                DHH_AGE<=64,
-                "45-64",
-                "65+"
-              ))))
       )
   
   recode_cchs1 <-

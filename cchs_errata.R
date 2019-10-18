@@ -1,6 +1,6 @@
 ### CCHS 2015/2016 Errata
 
-### UP TO DATE BASED ON Canadian Community Health Survey – Annual Component Errata !!! JUNE 2018 !!! ###
+### UP TO DATE BASED ON Canadian Community Health Survey Annual Component Errata !!! JUNE 2018 !!! ###
 ### IMPORTANT NOTE: If you are using the PMH module from CCHS 2015, you will need to code Errata Item-006.
 ###     It is not included here as it is not in the 2015/2016 dataset and would yield errors.
 
@@ -24,6 +24,7 @@ cchs_input$PAY_100 <- ifelse(cchs_input$PAY_090 == "No", 0, cchs_input$PAY_100)
 cchs_input$PAY_105 <- ifelse(cchs_input$PAY_090 == "No" | cchs_input$PAY_100 == 168, 0, cchs_input$PAY_105)
 
 # Item-002
+
 cchs_input$HMC_10_1 <- as.factor(ifelse(
   cchs_input$DHHDVHSZ > 1 & cchs_input$HMC_005A == "No", "Valid skip", as.character(cchs_input$HMC_10_1)))
 cchs_input$HMC_10_2 <- as.factor(ifelse(

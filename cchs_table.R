@@ -1,4 +1,4 @@
-cchs_est <- function(question, dataframe, geo_vars, standardize=FALSE, stand_var=NULL, stand_data=NULL, stand_pop=NULL, universe=NULL){
+cchs_est <- function(question, dataframe, geo_vars, standardize=FALSE, stand_var=NULL, stand_data=NULL, stand_pop=NULL){
   
   output_list <- lapply(setNames(geo_vars,geo_vars), function(geo_var) {
     
@@ -6,15 +6,8 @@ cchs_est <- function(question, dataframe, geo_vars, standardize=FALSE, stand_var
   
     question <- rlang::sym(question)
     
-    if(!is.null(universe)){
-      universe <- as.symbol(universe)
-      dataframe <- dplyr::filter(dataframe, !!universe == 1)
-    }
-    
     df_geofiltered <- 
       dplyr::filter(dataframe, !! geo_var == "Yes" & !(is.na(!! question)))
-    
-    df_geofiltered <- dplyr::select(df_geofiltered, !! question, !! geo_var, !! stand_var, FWGT, dplyr::starts_with("BSW"))
       
     svy_design <- setup_design(in_data=df_geofiltered)
     
@@ -160,15 +153,8 @@ cchs_estby <- function(question, dataframe, geo_vars, by_vars, standardize=FALSE
     for (i in seq_along(by_vars)) {
       by_var <- rlang::sym(by_vars[i])
       
-      if(!is.null(universe)){
-        universe <- as.symbol(universe)
-        dataframe <- dplyr::filter(dataframe, !!universe == 1)
-      }
-      
       df_geofiltered <- 
         dplyr::filter(dataframe, (!! geo_var) == "Yes" & !(is.na(!! question)) & !(is.na(!! by_var)))
-      
-      df_geofiltered <- dplyr::select(df_geofiltered, !! question, !! geo_var, !! by_var, !! stand_var, FWGT, dplyr::starts_with("BSW"))
         
       svy_design <- setup_design(in_data=df_geofiltered)
       
@@ -316,16 +302,18 @@ cchs_estby <- function(question, dataframe, geo_vars, by_vars, standardize=FALSE
   return(skinny_output)
 }
 
-cchs_table <- function(questions, dataframe, geo_vars, by_vars="none", by_compare=FALSE, standardize=FALSE, stand_var=NULL, stand_data=NULL, stand_pop=NULL, universe=NULL){
+cchs_table <- function(questions, dataframe, geo_vars, by_vars=NULL, standardize=FALSE, stand_var=NULL, stand_data=NULL, stand_pop=NULL){
   
   outputlist <- lapply(setNames(questions, questions), function(question) {
     
-    output <- cchs_est(question = question, dataframe = dataframe, geo_vars = geo_vars, standardize = standardize, stand_data = stand_data, stand_pop = stand_pop, stand_var = stand_var, universe = universe)
+    output <- cchs_est(question = question, dataframe = dataframe, geo_vars = geo_vars, standardize = standardize, stand_data = stand_data, stand_pop = stand_pop, stand_var = stand_var)
     
-    if (!by_vars == "none") {
-      outputby <- cchs_estby(question = question, dataframe = dataframe, geo_vars = geo_vars, by_vars = by_vars, standardize = standardize, stand_data = stand_data, stand_pop = stand_pop, stand_var = stand_var, universe=universe)  
-      output_comb <- dplyr::bind_rows(output, outputby)
+    if (!is.null(by_vars)) {
+      outputby <- cchs_estby(question = question, dataframe = dataframe, geo_vars = geo_vars, by_vars = by_vars, standardize = standardize, stand_data = stand_data, stand_pop = stand_pop, stand_var = stand_var)  
+      output <- dplyr::bind_rows(output, outputby)
     }
+    
+    return(output)
   })
 }
   

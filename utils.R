@@ -45,8 +45,11 @@ cchs_can2011 <- function(minage=NULL, maxage=NULL, agegrp_starts=NULL, agegrp_en
 
 make_std_agegrp <- function(dataframe, agegrp_starts, agegrp_ends, agegrp_names){
   
+  for (k in seq_along(agegrp_starts)) {
+  
   dataframe$std_agegrp[dataframe$DHH_AGE >= agegrp_starts[k] & dataframe$DHH_AGE <= agegrp_ends[k]] <- agegrp_names[k]
   
+  }
   return(dataframe)
 }
 

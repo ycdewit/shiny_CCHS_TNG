@@ -2,14 +2,10 @@
 #'
 #' Optionally imports CCHS data and bootstrap weights from Stata, runs errata from Statistics Canada, and cleans data.
 #'
-#' @param stata_cchsfile Optional. File path to Stata data file containing 2015/2016 CCHS data. One of stata_cchs or r_cchs must be specified.
-#' @param r_cchs Optional. Name of R dataframe of CCHS data.One of stata_cchs or r_cchs must be specified.
-#' @param includes_bootwts Optional. Indicates if cchs data file, either Stata or R, already contains the bootstrap weights which are distributed in a separate file by Statistics Canada. FALSE, the default, is indicates that the CCHS response data and bootweights are in separate files. TRUE indicates that the CCHS data file contains the bootweights.
-#' @param stata_bootwts Optional. File path to Stata data file containing bootstrap weights for CCHS data.
-#' @param r_bootwts Optional. Name of R dataframe of bootstrap weights.
-#' @param phu_name Name of public health unit or health region as found in CCHS variable GEODVHR4.
-#' @param peer_group Name of the Health Region Peer Group for your public health unit as found in CCHS variable GEODVPG. Not sure what peer group your PHU/Health Region is in? Go to: \url{https://www150.statcan.gc.ca/n1/pub/82-402-x/2015001/regions/tbl/tbl8-eng.htm}.
-#' @param prov_name Name of province. CCHS data should be already restricted to this province only.
+#' @param cchsfile Optional. File path to Stata data file containing 2015/2016 CCHS data. One of stata_cchs or r_cchs must be specified.
+#' @param includes_bootwts Indicates if cchs data file, either Stata or R, already contains the bootstrap weights which are distributed in a separate file by Statistics Canada. FALSE, the default, is indicates that the CCHS response data and bootweights are in separate files. TRUE indicates that the CCHS data file contains the bootweights.
+#' @param bootwts Optional. File path to Stata data file containing bootstrap weights for CCHS data.
+#' @param run_errata Indicates if the published errata for CCHS should be corrected. 
 #'
 #' @return Dataframe in tibble format of clean and ready to use 2015/2016 CCHS data.
 #'
@@ -21,29 +17,19 @@
 #' @examples
 #' cchs <-
 #'    cchs_prep(
-#'       stata_cchsfile = "/data/hs1516_on_distr.dta",
-#'       stata_bootwts = "/data/hs1516_on_bootwt.dta",
-#'       phu_name = "Hastings and Prince Edward Counties HU",
-#'       peer_group = "Health Region Peer Group C",
-#'       prov_name = "Ontario")
+#'       cchsfile = "/data/hs1516_on_distr.dta",
+#'       bootwts = "/data/hs1516_on_bootwt.dta")
 #'
 #' cchs_combined <-
 #'    cchs_prep(
-#'       r_cchsdf = cchs1516,
+#'       cchsfile = cchs1516,
 #'       inclues_bootwts = TRUE,
-#'       phu_name = "Calgary Zone",
-#'       peer_group = "Health Region Peer Group B",
-#'       prov_name = "Alberta")
+#'       run_errata = FALSE)
 #' @export
-
-# For ycdewit - To do:
-# 1. Add parameter/code for creating prov_flag. Past efforts had *issues*.
-# E.g. documentation: @param prov_code Optional. Code for creating a "Yes"/"No" column for your province. If your data file only contains data from your province, ignore.
-# 2. Run second a version of second
+#' 
 
 cchs_prep <-
-  function (cchsfile, bootwts=NULL, includes_bootwts=FALSE, run_errata=TRUE, 
-            phu_name, peer_group, prov_name, update_progress=NULL) {
+  function (cchsfile, includes_bootwts=FALSE, bootwts=NULL, run_errata=TRUE, update_progress=NULL) {
 
     if (grepl(".dta", cchsfile, ignore.case=TRUE) == TRUE) {
       hs1516 <- foreign::read.dta(cchsfile)
@@ -52,26 +38,26 @@ cchs_prep <-
       }
     }
     else if (grepl(".xlsx", cchsfile, ignore.case=TRUE) == TRUE) {
-      hs1516 <- (stata_cchsfile)
+      hs1516 <- read_xlsx(cchsfile)
       if (is.function(update_progress)) {
         update_progress(detail = "Data import")
       }
     }
     else if (grepl(".sav", cchsfile, ignore.case=TRUE) == TRUE) {
-      hs1516 <- foreign::read.spss(stata_cchsfile, to.data.frame = TRUE)
+      hs1516 <- foreign::read.spss(cchsfile, to.data.frame = TRUE)
       if (is.function(update_progress)) {
         update_progress(detail = "Data import")
       }
     }
     else if (grepl(".rds", cchsfile, ignore.case=TRUE) == TRUE) {
-      hs1516 <- readRDS(stata_cchsfile)
+      hs1516 <- readRDS(cchsfile)
       if (is.function(update_progress)) {
         update_progress(detail = "Data import")
       }
     }
     
     else if (grepl(".csv", cchsfile, ignore.case=TRUE) == TRUE) {
-      hs1516 <- utils::read.csv(stata_cchsfile)
+      hs1516 <- utils::read.csv(cchsfile)
       if (is.function(update_progress)) {
         update_progress(detail = "Data import")
       }
@@ -80,16 +66,8 @@ cchs_prep <-
     else {
       stop("cchsfile must be a filepath to a STATA, SPSS, R, Excel, or Comma-separated data file (i.e. with a .dta, .sav, .rds, .xlsx, or .csv file extension)")
     }
-
-    if (!phu_name %in% levels(hs1516$GEODVHR4)) {
-      print (levels(hs1516$GEODVHR4))
-      stop("PHU name is not in list of PHUs. See list of PHUs above - must match spelling and case.", call. = FALSE)
-    }
     
-    if (!peer_group %in% levels(hs1516$GEODVPG)) {
-      print (levels(hs1516$GEODVPG))
-      stop("Peer group is not in list of peer groups. See list of peer groups above - must match spelling and case.")
-    }
+    hs1516 <- dplyr::rename_all(hs1516, ~stringr::str_to_upper(.))
     
     if(run_errata==TRUE) {
       cchs_indata <- cchs_errata(dataframe = hs1516) 
@@ -101,46 +79,42 @@ cchs_prep <-
       cchs_indata <- hs1516
     }
     
-    cchs_indata <- dplyr::rename_all(cchs_indata, ~stringr::str_to_upper(.))
-    cchs_clean <-
-      cchs_cleanup(
-        dataframe = cchs_indata,
-        phu = phu_name,
-        peer = peer_group)
+    cchs_clean <- cchs_cleanup(dataframe = cchs_indata)
+    
     if (is.function(update_progress)) {
       update_progress(detail = "Basic cleaning")
     }
 
-    if (includes_bootwts == TRUE){
+    if (includes_bootwts == FALSE){
       if (grepl(".dta", bootwts, ignore.case=TRUE) == TRUE) {
-        hs1516_bootwt <- foreign::read.dta(stata_cchsfile)
+        hs1516_bootwt <- foreign::read.dta(bootwts)
         
         if (is.function(update_progress)) {
           update_progress(detail = "Bootstrap weights import")
         }
       }
       else if (grepl(".xlsx", bootwts, ignore.case=TRUE) == TRUE) {
-        hs1516_bootwt <- (stata_cchsfile)
+        hs1516_bootwt <- read_xlsx(bootwts)
         
         if (is.function(update_progress)) {
           update_progress(detail = "Bootstrap weights import")
         }
       }
       else if (grepl(".sav", bootwts, ignore.case=TRUE) == TRUE) {
-        hs1516_bootwt <- foreign::read.spss(stata_cchsfile, to.data.frame = TRUE)
+        hs1516_bootwt <- foreign::read.spss(bootwts, to.data.frame = TRUE)
         if (is.function(update_progress)) {
           update_progress(detail = "Bootstrap weights import")
         }
       }
       else if (grepl(".rds", bootwts, ignore.case=TRUE) == TRUE) {
-        hs1516_bootwt <- readRDS(stata_cchsfile)
+        hs1516_bootwt <- readRDS(bootwts)
         if (is.function(update_progress)) {
           update_progress(detail = "Bootstrap weights import")
         }
       }
       
       else if (grepl(".csv", bootwts, ignore.case=TRUE) == TRUE) {
-        hs1516_bootwt <- utils::read.csv(stata_cchsfile)
+        hs1516_bootwt <- utils::read.csv(bootwts)
         if (is.function(update_progress)) {
           update_progress(detail = "Bootstrap weights import")
         }
