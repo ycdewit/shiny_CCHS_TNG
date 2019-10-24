@@ -143,7 +143,7 @@ cchs_est <- function(question, dataframe, geo_vars, standardize=FALSE, stand_var
   output_combined <- as.data.frame(dplyr::bind_rows(output_list))
 }
 
-cchs_estby <- function(question, dataframe, geo_vars, by_vars, standardize=FALSE, stand_var=NULL, stand_data=NULL, stand_pop=NULL, universe=NULL) {
+cchs_estby <- function(question, dataframe, geo_vars, by_vars, standardize=FALSE, stand_var=NULL, stand_data=NULL, stand_pop=NULL, universe=NULL, update_progress=NULL) {
   
   for (j in seq_along(geo_vars)) {
   
@@ -152,6 +152,11 @@ cchs_estby <- function(question, dataframe, geo_vars, by_vars, standardize=FALSE
     
     for (i in seq_along(by_vars)) {
       by_var <- rlang::sym(by_vars[i])
+      
+      bynum <- i
+      if (is.function(update_progress)) {
+        update_progress(detail = paste0("Running stratifier ", bynum))
+      }
       
       df_geofiltered <- 
         dplyr::filter(dataframe, (!! geo_var) == "Yes" & !(is.na(!! question)) & !(is.na(!! by_var)))
@@ -302,9 +307,18 @@ cchs_estby <- function(question, dataframe, geo_vars, by_vars, standardize=FALSE
   return(skinny_output)
 }
 
-cchs_table <- function(questions, dataframe, geo_vars, by_vars=NULL, standardize=FALSE, stand_var=NULL, stand_data=NULL, stand_pop=NULL){
+cchs_table <- function(questions, dataframe, geo_vars, by_vars=NULL, standardize=FALSE, 
+                       stand_var=NULL, stand_data=NULL, stand_pop=NULL, update_progress=NULL){
+  
+  qnum <- 0
   
   outputlist <- lapply(setNames(questions, questions), function(question) {
+    
+    qnum <- qnum + 1
+    
+    if (is.function(update_progress)) {
+      update_progress(detail = paste0("Running question ", qnum))
+    }
     
     output <- cchs_est(question = question, dataframe = dataframe, geo_vars = geo_vars, standardize = standardize, stand_data = stand_data, stand_pop = stand_pop, stand_var = stand_var)
     

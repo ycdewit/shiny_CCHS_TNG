@@ -1,4 +1,4 @@
-package_list <- c("shiny", "shinyFiles", "shinyjs", "readxl", "foreign", "dplyr", "tibble", "stringr", "DT", "forcats", "reshape2")
+package_list <- c("shiny", "shinyFiles", "shinyjs", "readxl", "foreign", "dplyr", "tibble", "stringr", "DT", "forcats", "reshape2", "survey")
 
 get_packages <- function (packages) {
     for(package in packages) {
@@ -415,6 +415,20 @@ server <-
         
         observeEvent(input$submit_analysis, {
             
+            # Create a Progress object
+            progress <- shiny::Progress$new()
+            progress$set(message = "Running analyses", detail= "This will take awhile. Maybe take a walk, do something else and come back in a bit.", value = 0.1)
+            # Close the progress when this reactive exits (even if there's an error)
+            on.exit(progress$close())
+            
+            update_progress <- function(value = NULL, detail = NULL) {
+                if (is.null(value)) {
+                    value <- progress$getValue()
+                    value <- value + (progress$getMax() - value) / 5
+                }
+                progress$set(value = value, detail = detail)
+            }
+            
             in_questions <- unlist(cchs_dd[input$questions,"variable_name"])
             
             if(!is.null(input$stratifiers)){
@@ -424,7 +438,7 @@ server <-
             if(input$stand==TRUE){
                 in_standdata <- std_pop
                 in_standpop <- "stdpop"
-                in_standvar <- "std_agegroup"
+                in_standvar <- "std_agegrp"
             }
             else {
                 in_standdata <- NULL
@@ -442,14 +456,31 @@ server <-
             cchs_df$phu_vs_peer <- as.factor(ifelse(cchs_df$GEODVHR4==input$phu,"phu",ifelse(
                 cchs_df$GEODVPG==input$peer,"peer",NA)))
             
-            cchs_filtered <- dplyr::select(cchs_df, in_questions, phu, peer, prov, in_byvars, in_standvar, FWGT, dplyr::starts_with("BSW"), DHH_AGE, DHH_SEX)
+            svy_design <- 
+                survey::svrepdesign(
+                data = cchs_df,
+                weights = ~ FWGT,
+                repweights = "BSW[0-9]+",
+                type = "bootstrap",
+                combined.weights = TRUE)
+            
+            svy_design <- 
+                survey::svrepdesign(
+                data = cchs_df,
+                weights = ~ FWGT,
+                repweights = "BSW[0-9]+",
+                type = "bootstrap",
+                combined.weights = TRUE)
+                
+            svy_design_phu <- setup_design(in_data=cchs_filtered)
             
             results <<- 
                 cchs_table(questions = in_questions,
                            geo_vars = c("phu","peer","prov"),
                            by_vars = in_byvars,
                            standardize=input$stand, stand_data=in_standdata, stand_pop=in_standpop, stand_var=in_standvar, 
-                           dataframe = cchs_filtered)
+                           dataframe = cchs_filtered,
+                           update_progress = update_progress)
             
             clean_results <- 
                 dplyr::bind_rows(results) %>% 
@@ -490,7 +521,7 @@ server <-
                     vars(contains("Estimate"), contains("Lower 95% CI"), contains("Upper 95% CI")), ~round(as.numeric(.), 1)) %>%
                 mutate_at(
                     vars(contains("Sample")), ~as.numeric(.)) %>%
-                select(Indicator="indicator", `Indicator Level`="ind_level", contains("phu"), contains("prov"), contains("peer")) %>%
+                select(Indicator="indicator", `Indicator Level`="ind_level", contains("phu"), contains("prov"), contains("peer"))
                 
             
             output$results_table <- renderDataTable({
