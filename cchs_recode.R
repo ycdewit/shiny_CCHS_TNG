@@ -4,9 +4,9 @@ cchs_recode <-
   recode_cchs <-
   # Reference/basis for most SDOH: http://www.ottawapublichealth.ca/en/reports-research-and-statistics/resources/Documents/mental_health_report_2018_en.pdf
     mutate(dataframe,
-      rural="GEODVUR2",
-      education="EHG2DVR3",
-      sex="DHH_SEX",
+      rural=as.factor(GEODVUR2),
+      education=as.factor(EHG2DVR3),
+      sex=as.factor(DHH_SEX),
       agegrp_3=
         as.factor(
           ifelse(
