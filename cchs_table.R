@@ -1,78 +1,115 @@
-cchs_est <- function(question, dataframe, geo_vars, standardize=FALSE, stand_var=NULL, stand_data=NULL, stand_pop=NULL){
+clean_est <- function(in_data) {
   
-  output_list <- lapply(setNames(geo_vars,geo_vars), function(geo_var) {
-    
-    geo_var <- rlang::sym(geo_var)
+  cleanup <- 
+    dplyr::rename(in_data,`Sample Size`  =  "n", Estimate = "mean", CV = "V1", `Lower 95% CI` = "2.5 %",
+                  `Upper 95% CI` = "97.5 %")
   
-    question <- rlang::sym(question)
-    
-    df_geofiltered <- 
-      dplyr::filter(dataframe, !! geo_var == "Yes" & !(is.na(!! question)))
-      
-    svy_design <- setup_design(in_data=df_geofiltered)
-    
-    if(is.numeric(df_geofiltered[[rlang::quo_name(question)]])){
-      raw_n <- dplyr::count(df_geofiltered)
-    }
-    
-    else{
-    raw_n <- dplyr::count(df_geofiltered, !! question)
-    }
-     
-    wgt_est <- survey::svymean(as.formula(paste0("~", rlang::quo_name(question))), svy_design, na.rm = TRUE)
+  cleanup1 <- dplyr::select(cleanup,-SE)
   
-    combine <- 
-      dplyr::bind_cols(
-        raw_n,
-        as.data.frame(wgt_est),
-        as.data.frame(survey::cv(wgt_est), optional=TRUE),
-        as.data.frame(stats::confint(wgt_est)))
-    
-    cleanup <- 
-      dplyr::rename(combine,`Sample Size`  =  "n", Estimate = "mean", CV = "V1", `Lower 95% CI` = "2.5 %",
-                    `Upper 95% CI` = "97.5 %")
-    
-    cleanup1 <- dplyr::select(cleanup,-SE)
-    
-    if(is.numeric(df_geofiltered[[rlang::quo_name(question)]])){
-      cleanup2 <- dplyr::mutate(cleanup1, CV=CV*100)
-    }
-    else {
-      cleanup2 <- dplyr::mutate_at(cleanup1, dplyr::vars(Estimate, `Lower 95% CI`, `Upper 95% CI`, CV), scale100)
-    }
-    
-    cleanup2$`Quality Indicator` <-
-      as.factor(
+  if(is.numeric(df_geofiltered[[rlang::quo_name(question)]])){
+    cleanup2 <- dplyr::mutate(cleanup1, CV=CV*100)
+  }
+  
+  else {
+    cleanup2 <- dplyr::mutate_at(cleanup1, dplyr::vars(Estimate, `Lower 95% CI`, `Upper 95% CI`, CV), scale100)
+  }
+  
+  cleanup2$`Quality Indicator` <-
+    as.factor(
+      ifelse(
+        cleanup2$CV <= 15,
+        "",
         ifelse(
-          cleanup2$CV <= 15,
-          "",
+          cleanup2$CV <= 25,
+          "C",
           ifelse(
-            cleanup2$CV <= 25,
-            "C",
-            ifelse(
-              cleanup2$CV <= 35,
-              "D",
-              "NR"
-            )
+            cleanup2$CV <= 35,
+            "D",
+            "NR"
           )
         )
       )
+    )
+  
+  cleanup2$indicator <- rlang::quo_name(question)
+  
+  cleanup2$geo_area <- rlang::quo_name(geo_var)
+  
+  more_cleaning <- 
+    dplyr::mutate_at(cleanup2, dplyr::vars(Estimate, `Lower 95% CI`, `Upper 95% CI`, CV),
+                     list(~ifelse(`Quality Indicator` == "NR" | `Sample Size` < 10, NA, .)))
+}
+
+cchs_table <- function(questions, dataframe, geo_vars, by_vars=NULL, standardize=FALSE, 
+                       stand_var=NULL, stand_data=NULL, stand_pop=NULL, update_progress=NULL){
+  
+  qnum <- 0
+  
+  master_list <- lapply(setNames(questions, questions), function(question) {
     
-    cleanup2$indicator <- rlang::quo_name(question)
+    qnum <- qnum + 1
     
-    cleanup2$geo_area <- rlang::quo_name(geo_var)
+    if (is.function(update_progress)) {
+      update_progress(detail = paste0("Running question ", qnum, ": ", question))
+    }
     
-    more_cleaning <- 
-      dplyr::mutate_at(cleanup2, dplyr::vars(Estimate, `Lower 95% CI`, `Upper 95% CI`, CV),
-                       list(~ifelse(`Quality Indicator` == "NR" | `Sample Size` < 10, NA, .)))
-    
-    if(standardize == TRUE){
-    
-      if(is.null(stand_data)|is.null(stand_pop)|is.null(stand_var)){
-        stop("If standardize=TRUE then stand_data, stand_pop, and stand_var arguments must be specified")}
+    output_list <- lapply(setNames(geo_vars,geo_vars), function(geo_var) {
+      
+      geo_var <- rlang::sym(geo_var)
+      
+      question <- rlang::sym(question)
+      
+      if(as.name(geo_var)!="prov") {
+        svy_design <- subset(svy_design, !! geo_var=="Yes")
+      }
+      
+      df_geofiltered <- 
+        dplyr::filter(dataframe, !! geo_var == "Yes" & !(is.na(!! question)))
+      
+      if(is.numeric(df_geofiltered[[rlang::quo_name(question)]])){
+        raw_n <- dplyr::count(df_geofiltered)
+        names(raw_n) <- "Sample Size"
+        ind_level <- "Mean"
+      }
       
       else{
+        raw_n <- dplyr::count(df_geofiltered, !! question)
+        names(raw_n) <- c("ind_levels", "Sample Size")
+      }
+      raw_n$indicator <- !! question
+      
+      if(!is.null(by_vars)){
         
+        by_n <- lapply(setNames(by_vars, by_vars), function(by_col) {
+          if(!is.factor(df_geofiltered[[as.name(by_col)]])){
+            df_geofiltered[[as.name(by_col)]] <- as.factor(df_geofiltered[[as.name(by_col)]])
+          }
+          
+        })
+      }
+      
+      if (crude == TRUE) {
+        cr_wgt_est <- survey::svymean(as.formula(paste0("~", rlang::quo_name(question))), svy_design, na.rm = TRUE)
+        
+        combine <- 
+          dplyr::bind_cols(
+            as.data.frame(cr_wgt_est),
+            as.data.frame(survey::cv(cr_wgt_est), optional=TRUE),
+            as.data.frame(stats::confint(cr_wgt_est)))
+        
+        combine$rate_type <- "crude"
+        
+        out_crude <- clean_est(combine)
+        
+        output <-
+          dplyr::left_join(raw_n, out_crude)
+        }
+      
+      if(standardize == TRUE) {
+      
+        if(is.null(stand_data)|is.null(stand_pop)|is.null(stand_var)){
+          stop("If standardize=TRUE then stand_data, stand_pop, and stand_var arguments must be specified")}
+          
         stand_pop <- as.symbol(stand_pop)   
         
         stand_var <- as.symbol(stand_var)
@@ -96,34 +133,26 @@ cchs_est <- function(question, dataframe, geo_vars, standardize=FALSE, stand_var
             as.data.frame(survey::cv(std_est), optional=TRUE),
             as.data.frame(stats::confint(std_est)))
         
-        std_cleanup <- 
-          dplyr::rename(std_combine, `Std Estimate` = "mean", `Std CV` = "V1", `Std Lower 95% CI` = "2.5 %",
-                        `Std Upper 95% CI` = "97.5 %")
+        std_combine$rate_type <- "standardized"
         
-        std_cleanup1 <- dplyr::select(std_cleanup, -SE)
+        out_stand <- clean_est(std_combine)
         
-        if(is.numeric(df_geofiltered[[rlang::quo_name(question)]])){
-          std_cleanup2 <- dplyr::mutate(std_cleanup1, 
-                                        CV=CV*100,
-                                        ind_level="mean")
-        }
-        else {
-          std_cleanup2 <- dplyr::mutate_at(std_cleanup1, dplyr::vars(`Std Estimate`, `Std Lower 95% CI`, `Std Upper 95% CI`, `Std CV`), scale100)
+        if(!exists(output)) {
+          output <- left_join(raw_n, out_stand)
         }
         
-        std_comb <- dplyr::bind_cols(more_cleaning, std_cleanup2)
-        
-        cleaning <- 
-          dplyr::mutate_at(std_comb, dplyr::vars(`Std Estimate`, `Std Lower 95% CI`, `Std Upper 95% CI`, `Std CV`),
-                           list(~ifelse(`Quality Indicator` == "NR" | `Sample Size` < 10, NA, .)))
-        
-        more_cleaning <- dplyr::mutate(
-          cleaning, 
-          `Std Quality Indicator`=`Quality Indicator`,
-          `Std Sample Size`=`Sample Size`)
+        else output <- left_join(output, out_stand)
       }
-    }
-  
+      output$geo_area <- as.name(geo_var)
+    })
+    
+    to_masterlist <- dplyr::bind_rows(output_list)
+    return(to_masterlist)
+  })
+}
+
+still_need <- FALSE
+if(still_need==TRUE) {
     if(is.numeric(df_geofiltered[[rlang::quo_name(question)]])){
       output <- reshape2::melt(more_cleaning, id.vars = c("indicator", "geo_area","ind_level"))
     }
@@ -139,38 +168,32 @@ cchs_est <- function(question, dataframe, geo_vars, standardize=FALSE, stand_var
     
     }
     return(output)
-  })
   output_combined <- as.data.frame(dplyr::bind_rows(output_list))
 }
 
 cchs_estby <- function(question, dataframe, geo_vars, by_vars, standardize=FALSE, stand_var=NULL, stand_data=NULL, stand_pop=NULL, universe=NULL, update_progress=NULL) {
-  
-  for (j in seq_along(geo_vars)) {
-  
-    geo_var <- rlang::sym(geo_vars[j])
-    question <- rlang::sym(question)
     
     for (i in seq_along(by_vars)) {
       by_var <- rlang::sym(by_vars[i])
       
       bynum <- i
       if (is.function(update_progress)) {
-        update_progress(detail = paste0("Running stratifier ", bynum))
+        update_progress(detail = paste0("Running stratifier ", bynum,":", by_var))
       }
       
       df_geofiltered <- 
         dplyr::filter(dataframe, (!! geo_var) == "Yes" & !(is.na(!! question)) & !(is.na(!! by_var)))
         
-      svy_design <- setup_design(in_data=df_geofiltered)
-      
-      if(is.numeric(df_geofiltered[[rlang::quo_name(question)]])){
-        raw_n <- dplyr::count(df_geofiltered, !! by_var)
+      if(is.numeric(df_geofiltered[[as.name(question)]])){
+        by_n <- as.data.frame(table(df_geofiltered[, as.name(by_var)]))
+        names(by_n) <- c("strat_level", "Sample Size")
+        by_n$ind_level <- "Mean"
       }
       
       else{
-        skinny_n <- dplyr::count(df_geofiltered, !! question, !! by_var)
-        wide_n <- tidyr::spread(skinny_n, !! question, n)
-        raw_n <- dplyr::rename_at(wide_n, dplyr::vars(-!! by_var), paste0, "_n")
+        by_n <- 
+          as.data.frame(table(df_geofiltered[, as.name(question)], df_geofiltered[, as.name(by_var)]))
+        names(by_n) <- c("ind_level", "strat_level", "Sample Size")
       }
       
       wgt_est <- 
@@ -303,32 +326,18 @@ cchs_estby <- function(question, dataframe, geo_vars, by_vars, standardize=FALSE
   }
   skinny_output <- reshape2::melt(clean_output, id.vars = c("indicator", "ind_level", "stratifier", "strat_level", "geo_area"))
     }
-  }
   return(skinny_output)
 }
 
-cchs_table <- function(questions, dataframe, geo_vars, by_vars=NULL, standardize=FALSE, 
-                       stand_var=NULL, stand_data=NULL, stand_pop=NULL, update_progress=NULL){
-  
-  qnum <- 0
-  
-  outputlist <- lapply(setNames(questions, questions), function(question) {
+
     
-    qnum <- qnum + 1
+#    output <- cchs_est(question = question, dataframe = dataframe, geo_vars = geo_vars, standardize = standardize, stand_data = stand_data, stand_pop = stand_pop, stand_var = stand_var)
     
-    if (is.function(update_progress)) {
-      update_progress(detail = paste0("Running question ", qnum))
-    }
+#    if (!is.null(by_vars)) {
+#      outputby <- cchs_estby(question = question, dataframe = dataframe, geo_vars = geo_vars, by_vars = by_vars, standardize = standardize, stand_data = stand_data, stand_pop = stand_pop, stand_var = stand_var)  
+#      output <- dplyr::bind_rows(output, outputby)
+#    }
     
-    output <- cchs_est(question = question, dataframe = dataframe, geo_vars = geo_vars, standardize = standardize, stand_data = stand_data, stand_pop = stand_pop, stand_var = stand_var)
-    
-    if (!is.null(by_vars)) {
-      outputby <- cchs_estby(question = question, dataframe = dataframe, geo_vars = geo_vars, by_vars = by_vars, standardize = standardize, stand_data = stand_data, stand_pop = stand_pop, stand_var = stand_var)  
-      output <- dplyr::bind_rows(output, outputby)
-    }
-    
-    return(output)
-  })
-}
+#    return(output)
   
 
