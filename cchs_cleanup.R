@@ -7,6 +7,10 @@ cchs_cleanup <-
     cchs_clean1 <- dplyr::na_if(cchs_clean, 997)
     cchs_clean2 <- dplyr::na_if(cchs_clean1, 998)
     cchs_clean3 <- dplyr::na_if(cchs_clean2, 999)
+    
+    cchs_clean3 <- dplyr::na_if(cchs_clean3, 9997)
+    cchs_clean3 <- dplyr::na_if(cchs_clean3, 9998)
+    cchs_clean3 <- dplyr::na_if(cchs_clean3, 9999)
 
     cchs_clean4 <-
       dplyr::mutate_if(

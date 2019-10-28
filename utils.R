@@ -45,11 +45,16 @@ cchs_can2011 <- function(minage=NULL, maxage=NULL, agegrp_starts=NULL, agegrp_en
 
 make_std_agegrp <- function(dataframe, agegrp_starts, agegrp_ends, agegrp_names){
   
+  if("std_agegrp" %in% names(dataframe)) {
+    dataframe[["std_agegrp"]] <- NULL
+  }
+  
   for (k in seq_along(agegrp_starts)) {
   
   dataframe$std_agegrp[dataframe$DHH_AGE >= agegrp_starts[k] & dataframe$DHH_AGE <= agegrp_ends[k]] <- agegrp_names[k]
-  
   }
+  
+  dataframe$std_agegrp <- as.factor(dataframe$std_agegrp)
   return(dataframe)
 }
 
@@ -69,7 +74,7 @@ cchs_est <- function(svy_design, question) {
     question <- as.symbol(question)
   }
   
-  wgt_est <- survey::svymean(as.formula(paste0("~", as.name(question))), svy_design, na.rm = TRUE)
+  wgt_est <- survey::svymean(as.formula(paste0("~", as.name(question))), svy_design)
   
   combine <- 
     dplyr::bind_cols(
@@ -148,9 +153,8 @@ cchs_estby <- function(svy_design, by_vars, question) {
       as.factor(
         ifelse(stringr::str_detect(clean$variable,"ci_l"), "Lower 95% CI", ifelse(
           stringr::str_detect(clean$variable,"ci_u"), "Upper 95% CI", ifelse(
-            stringr::str_detect(clean$variable,"qual"), "Quality Indicator", ifelse(
               stringr::str_detect(clean$variable,"cv"), "CV", "Estimate")
-            )
+            
           )
         )
       )
@@ -159,6 +163,23 @@ cchs_estby <- function(svy_design, by_vars, question) {
     
     ready <- reshape2::dcast(clean, ind_level+strat_level~measure)
     ready$stratifier <- rlang::quo_name(by_var)
+    
+    ready$`Quality Indicator` <-
+      as.factor(
+        ifelse(
+          ready$CV <= 15,
+          "",
+          ifelse(
+            ready$CV <= 25,
+            "C",
+            ifelse(
+              ready$CV <= 35,
+              "D",
+              "NR"
+            )
+          )
+        )
+      )
     
     if (i==1) {
       output <- ready

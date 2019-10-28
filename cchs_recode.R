@@ -105,23 +105,30 @@ cchs_recode <-
       gendvswl_rev=fct_collapse(GENDVSWL,Satisfied=c("Satisfied","Very Satisfied"), `Not Satified`=c("Neither satisfied nor dissatisfied","Dissatisfied","Very Dissatisfied")),
       depdvsev_rev=fct_collapse(DEPDVSEV,`Moderate to severe depression`=c("Moderate depression","Moderately severe depression","Severe depression")),
       dep=fct_collapse(depdvsev_rev,`Mild to severe depression`=c("Mild depression","Moderate to severe depression")),
-      smk_agefirst=ifelse(
+      smk_agefirst=as.factor(ifelse(
         SMK_035<=15, "15 or less", ifelse(
           SMK_035<=17, "16-17", ifelse(
             SMK_035<=20, "18-20", "21+"
           )
         )
-      ),
-      smk_agedaily=ifelse(
+      )),
+      smk_agedaily=as.factor(ifelse(
         SMK_040<=15, "15 or less", ifelse(
           SMK_040<=17, "16-17", ifelse(
             SMK_040<=20, "18-20", "21+"
           )
         )
-      ),
-      ets_nonsmkr=ifelse(
-        SMK_005=="Not at all", ETS_005, NA
-      ),
+      )),
+      ets_nonsmkr=as.factor(ifelse(
+        SMK_005=="Not at all", as.character(ETS_005), NA
+      )),
+      smk_status3=
+        as.factor(
+          ifelse(
+            stringr::str_detect(SMKDVSTY, "Current"),"Current", ifelse(
+              stringr::str_detect(SMKDVSTY, "Former"), "Former", "Non-smoker")
+            )
+          ),
       alc_day1= ifelse(ALW_010>0,1,0),
       alc_day2= ifelse(ALW_015>0,1,0),
       alc_day3= ifelse(ALW_020>0,1,0),

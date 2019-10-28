@@ -1,92 +1,91 @@
-library(survey)
+shiny_cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_prov, questions, 
+                             by_vars=NULL, crude=TRUE, standardize=FALSE, 
+                             stand_var=NULL, stand_data=NULL, stand_pop=NULL, update_progress=NULL){
 
-# TO DO
-# Switch as.name(geo_var)!="prov" to be if df$geo_var == 100% of data
-
-cchs_table <- function(dataframe, svy_design=NULL, questions, geo_vars, by_vars=NULL, standardize=FALSE, 
-                       stand_var=NULL, stand_data=NULL, stand_pop=NULL, update_progress=NULL){
-  
-  if(is.null(svy_design)){
-    svy_design <- setup_design(dataframe)
-  }
-  
-  svy_design[["variables"]] <- dplyr::mutate_if(svy_design[["variables"]], is.factor, ~forcats::fct_explicit_na(.))
-  
   qnum <- 0
   
-  master_list <- lapply(setNames(questions, questions), function(question) {
+  geo_vars <- c("phu", "peer", "prov")
+  
+  master_list <- lapply(setNames(geo_vars, geo_vars), function(geo_var) {
     
-    qnum <- qnum + 1
+    df_filtered <- 
+      dataframe[which(dataframe[[geo_var]] == "Yes"),]
     
-    if (is.function(update_progress)) {
-      update_progress(detail = paste0("Running question ", qnum, ": ", question))
+    if(geo_var=="phu") {
+      cchs_survey <- svy_design_phu
     }
     
-    output_list <- lapply(setNames(geo_vars,geo_vars), function(geo_var) {
+    else if(geo_var=="peer") {
+      cchs_survey <- svy_design_peer
+    }
+    
+    else cchs_survey <- svy_design_prov
+    
+    cchs_survey[["variables"]] <- dplyr::mutate_if(cchs_survey[["variables"]], is.factor, ~forcats::fct_explicit_na(.))
+    
+    output_list <- lapply(setNames(questions,questions), function(question) {
+      
+      qnum <- qnum + 1
       
       if (is.function(update_progress)) {
-        update_progress(detail = paste0("Running question ", qnum, "(", question, ") for ", geo_var))
+        update_progress(detail = paste0("Running ", geo_var, "estimates for question ", qnum, ":", question, "."))
       }
-      
-      geo_var <- rlang::sym(geo_var)
-      
+    
       question <- rlang::sym(question)
       
-      if(as.name(geo_var)!="prov") {
-        svy_design <- subset(svy_design, !! geo_var=="Yes")
-      }
-      
-      df_filtered <- 
-        dplyr::filter(dataframe, !! geo_var == "Yes" & !(is.na(!! question)))
-      
-      num_q <-is.numeric(df_filtered[[rlang::quo_name(question)]])
-      
-      if(num_q==TRUE){
-        raw_n <- dplyr::count(df_filtered)
-        names(raw_n) <- "Sample Size"
-        ind_levels <- "Mean"
+      if(is.numeric(cchs_survey[["variables"]][[as.name(question)]])==TRUE){
+        n_sample <- length(which(!is.na(df_filtered[[as.name(question)]])))
+        raw_n <- data.frame("Mean", n_sample)
+        names(raw_n) <- c("ind_level", "Sample Size")
       }
       
       else{
-        raw_n <- dplyr::count(df_filtered, !! question)
-        names(raw_n) <- c("ind_levels", "Sample Size")
+        raw_n <- as.data.frame(table(df_filtered[[as.name(question)]]))
+        names(raw_n) <- c("ind_level", "Sample Size")
+        raw_n <- raw_n[which(raw_n$ind_level!="Valid skip"),]
       }
       
       if(!is.null(by_vars)){
         
         by_n <- lapply(setNames(by_vars, by_vars), function(by_col) {
           if(!is.factor(df_filtered[[as.name(by_col)]])){
-            df_filtered[[as.name(by_col)]] <- as.factor(df_filtered[[as.name(by_col)]])
+            df_filtered[[as.name(by_col)]] <- as.factor(is.df_filtered[[as.name(by_col)]])
           }
-          freqdf <- as.data.frame(table(df_filtered[[as.name("gendvswl_rev")]],df_filtered[[as.name(by_col)]]))
-          names(freqdf) <- c("ind_level", "strat_level", "Sample Size")
-          freq <- cbind(freqdf$ind_level, stratifier=as.name(by_col), freqdf$strat_level, freqdf$`Sample Size`)
-          freq$ind_level <- as.factor(ifelse(as.character(freq$ind_level)==as.character(freq$indicator), "Mean", as.character(freq$ind_level)))
-          return(freq)
+          if(is.numeric(cchs_survey[["variables"]][[as.name(question)]])==TRUE){
+            freqdf <- as.data.frame(table(df_filtered[which(!is.na(df_filtered[[as.name(question)]])), "DHH_SEX"]))
+            names(freqdf) <- c("strat_level", "Sample Size")
+            freqdf <- cbind(ind_level="Mean", freqdf)
+          }
+          else{
+            freqdf <- as.data.frame(table(df_filtered[[as.name(question)]],df_filtered[[as.name(by_col)]]))
+            names(freqdf) <- c("ind_level", "strat_level", "Sample Size")
+            freqdf <- cbind(stratifier=by_col, freqdf)
+          }
+          return(freqdf)
         })
           
         by_n <- dplyr::bind_rows(by_n)
         
         by_n$stratifier <- as.factor(by_n$stratifier)
         by_n$strat_level <- as.factor(by_n$strat_level)
-        
+        by_n <- by_n[which(by_n$ind_level!="Valid skip" & by_n$strat_level!="Valid skip"),]
       }
       
       if (crude == TRUE) {
         
-        crude_est <- clean_est(svy_design, question)
+       out_crude  <- cchs_est(svy_design=cchs_survey, question=question)
         
-        crude_est$est_type <- "crude"
+        out_crude$est_type <- "crude"
         
         output <-
           dplyr::left_join(raw_n, out_crude)
         
         if(!is.null(by_vars)){
-          out_crude_by <- cchs_estby(svy_design, by_vars, question)
+          out_crude_by <- cchs_estby(svy_design=cchs_survey, by_vars, question)
           output_crude_by <- dplyr::left_join(by_n, out_crude_by)
           output_crude_by$est_type <- "crude"
           output <- dplyr::bind_rows(output, output_crude_by)
-        }  
+        }
       }
       
       if(standardize == TRUE) {
@@ -94,26 +93,26 @@ cchs_table <- function(dataframe, svy_design=NULL, questions, geo_vars, by_vars=
         if(is.null(stand_data)|is.null(stand_pop)|is.null(stand_var)){
           stop("If standardize=TRUE then stand_data, stand_pop, and stand_var arguments must be specified")}
         
-        stand_pop <- as.symbol(stand_pop)   
+        base <- data.frame(Var1=levels(dataframe[[stand_var]]))
+        base[[as.name(stand_var)]] <- as.factor(base$Var1)
         
-        stand_var <- as.symbol(stand_var)
-        
-        base <- dplyr::count(df_filtered, !!stand_var)
         std_pop_data <- dplyr::left_join(base, stand_data)
         
+        print("Spot 1")
         std_svy_design <- 
           survey::svystandardize(
-            design = svy_design,
-            by = as.formula(paste0("~ ",as.name(stand_var))),
+            design = cchs_survey,
+            by = as.formula(paste0("~ ",stand_var)),
             over = ~ 1,
-            population = dplyr::pull(std_pop_data,var = !! stand_pop))
-        
+            population = stand_data[[stand_pop]])
+        print("Spot 2")
         std_est <- cchs_est(std_svy_design, question)
         std_est$est_type <- "standardized"
         
-        out_stand <- left_join(raw_n, std_est)
+        out_stand <- dplyr::left_join(raw_n, std_est)
+        print("Spot 2")
         
-        if(!exists(output)) {
+        if(!exists("output")) {
           output <- out_stand
         }
         
@@ -122,17 +121,18 @@ cchs_table <- function(dataframe, svy_design=NULL, questions, geo_vars, by_vars=
         if(!is.null(by_vars)){
           out_std_by <- cchs_estby(std_svy_design, by_vars, question)
           output_std_by <- dplyr::left_join(by_n, out_std_by)
-          output_std_by$est_type <- "standardized"
+          output_std_by$est_type <- c("standardized")
           output <- dplyr::bind_rows(output, output_std_by)
         } 
       }
-      output$geo_area <- as.name(geo_var)
+      output$indicator <- paste0(question)
       clean_output <- dplyr::mutate_at(output, dplyr::vars(Estimate, `Lower 95% CI`, `Upper 95% CI`),
                                        list(~ifelse(`Quality Indicator` == "NR" | `Sample Size` < 10, NA, .)))
       return(clean_output)
     })
     to_masterlist <- dplyr::bind_rows(output_list)
-    to_masterlist$indicator <- as.name(question)
+    to_masterlist$geo_area <- paste0(geo_var)
     return(to_masterlist)
   })
+  output <- dplyr::bind_rows(master_list)
 }

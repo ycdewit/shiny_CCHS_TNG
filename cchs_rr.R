@@ -118,10 +118,8 @@ cchs_ratio <- function(question, response=NULL, dataframe, compareby, standardiz
       output <- dplyr::bind_rows(output, df1)
     }
   }
-  
-  skinny_output <- reshape2::melt(output, id.vars = c("indicator", "ind_level", "comparator", "reference"))
-  
-  clean_output <- dplyr::rename(skinny_output, measure="variable")
+
+  return(output)
   
 }
 
