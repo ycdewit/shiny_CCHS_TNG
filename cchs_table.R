@@ -33,7 +33,10 @@ shiny_cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_des
     
       question <- rlang::sym(question)
       
-      if(is.numeric(cchs_survey[["variables"]][[as.name(question)]])==TRUE){
+      print(is.numeric(cchs_survey[["variables"]][[as.name(question)]]))
+      
+      if(is.numeric(cchs_survey[["variables"]][[as.name(question)]])){
+        cchs_survey <- subset(cchs_survey, !is.na(ALWDVWKY))
         n_sample <- length(which(!is.na(df_filtered[[as.name(question)]])))
         raw_n <- data.frame("Mean", n_sample)
         names(raw_n) <- c("ind_level", "Sample Size")
@@ -51,10 +54,10 @@ shiny_cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_des
           if(!is.factor(df_filtered[[as.name(by_col)]])){
             df_filtered[[as.name(by_col)]] <- as.factor(is.df_filtered[[as.name(by_col)]])
           }
-          if(is.numeric(cchs_survey[["variables"]][[as.name(question)]])==TRUE){
-            freqdf <- as.data.frame(table(df_filtered[which(!is.na(df_filtered[[as.name(question)]])), "DHH_SEX"]))
+          if(is.numeric(cchs_survey[["variables"]][[as.name(question)]])){
+            freqdf <- as.data.frame(table(df_filtered[which(!is.na(df_filtered[[as.name(question)]])), by_col]))
             names(freqdf) <- c("strat_level", "Sample Size")
-            freqdf <- cbind(ind_level="Mean", freqdf)
+            freqdf <- cbind(stratifier=by_col, ind_level="Mean", freqdf)
           }
           else{
             freqdf <- as.data.frame(table(df_filtered[[as.name(question)]],df_filtered[[as.name(by_col)]]))
@@ -98,7 +101,6 @@ shiny_cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_des
         
         std_pop_data <- dplyr::left_join(base, stand_data)
         
-        print("Spot 1")
         std_svy_design <- 
           survey::svystandardize(
             design = cchs_survey,
@@ -120,7 +122,9 @@ shiny_cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_des
         
         if(!is.null(by_vars)){
           out_std_by <- cchs_estby(std_svy_design, by_vars, question)
+          print(out_std_by)
           output_std_by <- dplyr::left_join(by_n, out_std_by)
+          print(out_std_by)
           output_std_by$est_type <- c("standardized")
           output <- dplyr::bind_rows(output, output_std_by)
         } 

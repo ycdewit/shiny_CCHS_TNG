@@ -28,7 +28,7 @@ ui <- fluidPage(
                          strong("Please select CCHS data files"), 
                          br(),
                          em("Currently SPSS, STATA, R (.rds), Excel, and Comma-Separated data files are accepted. 
-                   Will work with additional variables added but if any of the original variables are modified this tool may not work."),
+                            Will work with additional variables added but if any of the original variables are modified this tool may not work."),
                          br(),
                          br(),
                          shinyFilesButton('hs_file', label='Select CCHS 2015-16 Data File', title='Please select a file', multiple=FALSE),

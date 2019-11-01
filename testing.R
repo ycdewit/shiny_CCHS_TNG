@@ -40,21 +40,51 @@ cchs_testdf$phu_vs_prov <- as.factor(ifelse(cchs_testdf$GEODVHR4=="Hastings and 
 cchs_testdf$phu_vs_peer <- as.factor(ifelse(cchs_testdf$GEODVHR4=="Hastings and Prince Edward Counties HU","phu",ifelse(
   cchs_testdf$GEODVPG=="Health Region Peer Group C","peer",NA)))
 
-
-cchs_testdf <- make_std_agegrp(cchs_testdf, agegrp_starts=c(12,20,35,50,65), agegrp_ends=c(19,34,49,64,105), 
+cchs_testdf <- make_std_agegrp(cchs_testdf, agegrp_starts=c(12,19,35,50,65), agegrp_ends=c(18,34,49,64,105), 
                                agegrp_names=c("12-19","20-34","35-49","50-64","65+"))
 
-std_pop <- cchs_can2011(minage=12, maxage=105, agegrp_starts=c(12,20,35,50,65), agegrp_ends=c(19,34,49,64,105), 
+std_pop <- cchs_can2011(minage=12, maxage=105, agegrp_starts=c(12,19,35,50,65), agegrp_ends=c(18,34,49,64,105), 
                         agegrp_names=c("12-19","20-34","35-49","50-64","65+"))
 
-std_pop19 <- cchs_can2011(minage=19, maxage=105, agegrp_starts=c(119,35,50,65), agegrp_ends=c(34,49,64,105), 
+cchs_testdf <- make_std_agegrp(cchs_testdf, agegrp_starts=c(15, 30, 45, 60, 75), agegrp_ends=c(29, 44, 59, 74, 105), 
+                               agegrp_names=c("15-29","30-44","45-59","60-74", "75+"))
+
+std_pop15 <- cchs_can2011(minage=12, maxage=105, agegrp_starts=c(15, 30, 45, 60, 75), agegrp_ends=c(29, 44, 59, 74, 105), 
+                          agegrp_names=c("15-29","30-44","45-59","60-74", "75+"))
+
+cchs_testdf <- make_std_agegrp(cchs_testdf, agegrp_starts=c(15,35,65), agegrp_ends=c(34,64,105), 
+                               agegrp_names=c("15-34","35-64","65+"))
+
+cchs_testdf$agegrp_intermahp <- as.factor(
+  ifelse(
+    cchs_testdf$DHH_AGE>=15 & cchs_testdf$DHH_AGE<=34, "15-34", ifelse(
+      cchs_testdf$DHH_AGE>=35 & cchs_testdf$DHH_AGE<=64, "35-64", ifelse(
+        cchs_testdf$DHH_AGE>=65, "65+", NA
+        )
+      )
+    ))
+
+std_pop19 <- cchs_can2011(minage=19, maxage=105, agegrp_starts=c(19,35,50,65), agegrp_ends=c(34,49,64,105), 
                         agegrp_names=c("12-19","19-34","35-49","50-64","65+"))
+
+cchs_testdf$ALWDVWKY<-ifelse(cchs_testdf$ALWDVWKY>694, NA, cchs_testdf$ALWDVWKY)
 
 test_survey <- setup_design(cchs_testdf)
 test_survey_phu <- subset(test_survey, phu=="Yes")
 test_survey_peer <- subset(test_survey, peer=="Yes")
 
-test_survey[["variables"]] <- dplyr::mutate_if(test_survey[["variables"]], is.factor, ~forcats::fct_explicit_na(.))
+library(dplyr)
+
+cchs_testdf_F <- dplyr::filter(cchs_testdf, DHH_SEX=="Female") %>% mutate(ALWDVWKY=ifelse(ALWDVWKY>694, NA, ALWDVWKY))
+
+test_survey_F <- setup_design(cchs_testdf_F)
+test_survey_phu_F <- subset(test_survey_F, phu=="Yes")
+test_survey_peer_F <- subset(test_survey_F, peer=="Yes")
+
+cchs_testdf_M <- dplyr::filter(cchs_testdf, DHH_SEX=="Male") %>% mutate(ALWDVWKY=ifelse(ALWDVWKY>694, NA, ALWDVWKY))
+test_survey_M <- setup_design(cchs_testdf_M)
+test_survey_phu_M <- subset(test_survey_M, phu=="Yes")
+test_survey_peer_M <- subset(test_survey_M, peer=="Yes")
 
 
 test_est <- cchs_est(test_survey, "gendvswl_rev")
