@@ -1,4 +1,4 @@
-shiny_cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_prov, questions, 
+cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_prov, questions, 
                              by_vars=NULL, crude=TRUE, standardize=FALSE, 
                              stand_var=NULL, stand_data=NULL, stand_pop=NULL, update_progress=NULL){
 
@@ -28,12 +28,10 @@ shiny_cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_des
       qnum <- qnum + 1
       
       if (is.function(update_progress)) {
-        update_progress(detail = paste0("Running ", geo_var, "estimates for question ", qnum, ":", question, "."))
+        update_progress(detail = paste0("Running ", geo_var, " estimates for question ", qnum, ": ", question, "."))
       }
     
       question <- rlang::sym(question)
-      
-      print(is.numeric(cchs_survey[["variables"]][[as.name(question)]]))
       
       if(is.numeric(cchs_survey[["variables"]][[as.name(question)]])){
         cchs_survey <- subset(cchs_survey, !is.na(ALWDVWKY))
@@ -107,12 +105,11 @@ shiny_cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_des
             by = as.formula(paste0("~ ",stand_var)),
             over = ~ 1,
             population = stand_data[[stand_pop]])
-        print("Spot 2")
+        
         std_est <- cchs_est(std_svy_design, question)
         std_est$est_type <- "standardized"
         
         out_stand <- dplyr::left_join(raw_n, std_est)
-        print("Spot 2")
         
         if(!exists("output")) {
           output <- out_stand
@@ -122,9 +119,7 @@ shiny_cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_des
         
         if(!is.null(by_vars)){
           out_std_by <- cchs_estby(std_svy_design, by_vars, question)
-          print(out_std_by)
           output_std_by <- dplyr::left_join(by_n, out_std_by)
-          print(out_std_by)
           output_std_by$est_type <- c("standardized")
           output <- dplyr::bind_rows(output, output_std_by)
         } 

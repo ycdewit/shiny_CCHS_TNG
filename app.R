@@ -52,6 +52,12 @@ ui <- fluidPage(
                 ),
                 tabPanel(
                     "Setup Analysis",
+                    br(),
+                    actionButton("advanced", "Advanced Options"),
+                    hidden(
+                        div(id="adv_opt",
+                            textInput("df_code", "R syntax for manipulating CCHS data (e.g. add new variables)")
+                        )),
                     h4("Geographic Variables"),
                     selectInput("phu", label="Please select PHU", choices = NULL),
                     textInput("phu_label", "PHU Label for Tables and Graphs", placeholder = "Enter a short name for PHU"),
@@ -142,22 +148,26 @@ ui <- fluidPage(
                     em("This is for restricting analyses to specific groups (e.g. adults 18+)"),
                     sliderInput("age_range", label = "Age Range", min = 10, 
                                 max = 105, value = c(12, 105), step = 1),
+                    checkboxGroupInput("choose_sex", label = h4("Sex"), 
+                                       choices = list("Male" = "Male", "Female" = "Female"),
+                                       selected = c("Male","Female")),
                     actionButton("submit_analysis", "Run", width = "100%")
                 )
             )
         ),
         mainPanel(
             tabsetPanel(
-                tabPanel("Explore Data",
+                tabPanel(
+                    "Table",
+                    DT::dataTableOutput("results_table"),
+                    shinySaveButton(id="save_table", label="Export CCHS table", title=NULL, 
+                                    filetype = list(excel=c('xlsx','xls'), R=c('rds'), csv=c('csv')))
+                ),
+                tabPanel("Graph"),
+                tabPanel("Review loaded data",
                          h4("CCHS Data"),
                          textOutput("no_data"),     
-                         DT::dataTableOutput("cchs_df")),
-                tabPanel(
-                    "Table", 
-                    verbatimTextOutput("test_qs"),
-                    DT::dataTableOutput("results_table")
-                ),
-                tabPanel("Graph") 
+                         DT::dataTableOutput("cchs_df"))
             )
         )
     )
@@ -173,9 +183,9 @@ server <-
         #file management
         volumes <- c(Home = fs::path_home(), "R Installation" = R.home(), getVolumes()())
         shinyFileChoose(input, "hs_file", roots = c(volumes, "wd"="."), defaultRoot = "wd", session = session)
-        shinyFileChoose(input, "bs_file", roots = volumes, session = session)
-        shinyFileSave(input, "save", roots = volumes, session = session, restrictions = system.file(package = "base"))
-        
+        shinyFileChoose(input, "bs_file", roots = c(volumes, "wd"="."), session = session)
+        shinyFileSave(input, "save_table", roots = c(volumes), session = session)
+            
         #Previous data    
         observe({    
             if (file.exists("cchs_data.rds")){
@@ -183,7 +193,7 @@ server <-
             }
             else {
                 updateCheckboxInput(session, "load_prev", value=FALSE)
-                hide("prev")
+                shinyjs::hide("prev")
                 cchs_df <<- NULL}
         }, priority = 30)
         
@@ -192,7 +202,7 @@ server <-
                 file.remove("cchs_data.rds")
                 cchs_df <<- NULL
                 updateCheckboxInput(session, "load_prev", value=FALSE)
-                hide("prev")
+                shinyjs::hide("prev")
             }
         }, priority = 27)
         
@@ -217,12 +227,12 @@ server <-
         
         observeEvent(input$boot_yn, {
             if(input$boot_yn==TRUE){
-                hide("bs_file")  # hide is a shinyjs function
-                hide("txt_bs")
+                shinyjs::hide("bs_file")  # hide is a shinyjs function
+                shinyjs::hide("txt_bs")
             }
             else{
-                show("bs_file")  # hide is a shinyjs function
-                show("txt_bs")
+                shinyjs::show("bs_file")  # show is a shinyjs function
+                shinyjs::show("txt_bs")
             }
         })
         
@@ -279,6 +289,10 @@ server <-
             
             output$cchs_df <- 
                 DT::renderDataTable(cchs_df)
+            
+            if(!is.null(cchs_df)){
+                svy_design <<- setup_design(cchs_df)}
+            
         }, priority = 20)
         
         #Source code I need for analyses
@@ -293,30 +307,32 @@ server <-
             bind_rows(additional_variables) %>%
             select(variable_name, variable_desc, variable_group)
         
-        #Responsive age standardization stuff        
+        observeEvent(input$advanced, {
+            shinyjs::toggle("adv_opt")
+        })
+        
+        #Responsive age standardization stuff 
+        age_rows <<- 5
+        
+        observeEvent(input$more_ag, {
+            age_rows <<- min(age_rows+1,10)
+        })
+        
+        observeEvent(input$less_ag, {
+            age_rows <<- max(age_rows-1,1)
+        })
+        
         observe({
-            input$stand
-            age_rows <<- 5
+            input$less_ag
+            input$more_ag
             
-            observeEvent(input$more_ag, {
-                age_rows <<- min(age_rows+1,10)
-            }, priority = -10)
+            if(input$stand==TRUE){
             
-            observeEvent(input$less_ag, {
-                age_rows <<- max(age_rows-1,1)
-            }, priority = -10)
-            
-            observe({
-                input$more_ag
-                input$less_ag
-                
-                if(input$stand==TRUE){
-                    
-                    show("std_ag")
+                shinyjs::show("std_ag")
                     
                     for (i in 1:10) {
                         if(i<=age_rows){
-                            show(eval(paste0("std_ag",i)))
+                            shinyjs::show(eval(paste0("std_ag",i)))
                             
                             start_val <- paste0("ag_start",i)
                             end_val <- paste0("ag_end",i)
@@ -339,7 +355,7 @@ server <-
                             }
                         }
                         else {
-                            hide(eval(paste0("std_ag",i)))
+                            shinyjs::hide(eval(paste0("std_ag",i)))
                         }
                         
                     }
@@ -347,11 +363,15 @@ server <-
                     maxage <- max(agegrp_ends, na.rm = TRUE)
                     updateSliderInput(session, "age_range", value=c(minage, maxage))
                     cchs_df <<- make_std_agegrp(cchs_df, agegrp_starts = agegrp_starts, agegrp_ends = agegrp_ends, agegrp_names = agegrp_names)
-                    std_pop <<- cchs_can2011(minage = minage, maxage = maxage, agegrp_starts = agegrp_starts, agegrp_ends = agegrp_ends, agegrp_names = agegrp_names) 
+                    print(table(cchs_df$std_agegrp))
+                    svy_design <<- setup_design(cchs_df)
+                    std_pop <<- cchs_can2011(minage = minage, maxage = maxage, agegrp_starts = agegrp_starts, agegrp_ends = agegrp_ends, agegrp_names = agegrp_names)
+                    print(table(std_pop$std_agegrp))
                 }
+            
+            else{shinyjs::hide("std_ag")}
                 
             })
-        })
         
         #Responsive select/selectize inputs for "Setup Analyses" tab
         observe({
@@ -409,8 +429,30 @@ server <-
             
         }, priority = 10)
         
-        observeEvent(input$questions, {
-            output$test_qs <- renderPrint({input$questions}) 
+        observeEvent(input$phu, {
+            cchs_df$phu <<- as.factor(ifelse(cchs_df$GEODVHR4==input$phu,"Yes","No"))
+            
+            cchs_df$prov <<- "Yes"
+            
+            cchs_df$phu_vs_prov <<- as.factor(ifelse(cchs_df$GEODVHR4==input$phu,"phu","prov"))
+            
+            if(exists("svy_design")){
+            svy_design <<- update(svy_design, phu = cchs_df$phu)
+            svy_design <<- update(svy_design, prov = cchs_df$prov)
+            svy_design <<- update(svy_design, phu_vs_prov = cchs_df$phu_vs_prov)
+            }
+        })
+        
+        observeEvent(input$peer, {
+            cchs_df$peer <<- as.factor(ifelse(cchs_df$GEODVHR4!=input$phu & cchs_df$GEODVPG==input$peer,"Yes","No"))
+            
+            cchs_df$phu_vs_peer <<- as.factor(ifelse(cchs_df$GEODVHR4==input$phu,"phu",ifelse(
+                cchs_df$GEODVPG==input$peer,"peer",NA)))
+            
+            if(exists("svy_design")){
+            svy_design <<- update(svy_design, peer = cchs_df$peer)
+            svy_design <<- update(svy_design, phu_vs_peer = cchs_df$phu_vs_peer)
+            }
         })
         
         observeEvent(input$submit_analysis, {
@@ -435,6 +477,11 @@ server <-
                 in_byvars <- unlist(cchs_dd[input$stratifiers,"variable_name"])}
             else in_byvars <- NULL
             
+            cchs_svy <- 
+                subset(
+                    svy_design, 
+                    (DHH_SEX %in% input$choose_sex) & DHH_AGE>=min(input$age_range) & DHH_AGE<=max(input$age_range))
+            
             if(input$stand==TRUE){
                 in_standdata <- std_pop
                 in_standpop <- "stdpop"
@@ -445,89 +492,99 @@ server <-
                 in_standpop <- NULL
                 in_standvar <- NULL}
             
-            cchs_df$phu <- as.factor(ifelse(cchs_df$GEODVHR4==input$phu,"Yes","No"))
+            cchs_svy <<- update(cchs_svy, std_agegrp=cchs_df$std_agegrp)
+            print(table(cchs_svy[["variables"]][["std_agegrp"]]))
             
-            cchs_df$peer <- as.factor(ifelse(cchs_df$GEODVHR4!=input$phu & cchs_df$GEODVPG==input$peer,"Yes","No"))
+            cchs_svy_phu <-
+                subset(cchs_svy, phu=="Yes")
             
-            cchs_df$prov <- "Yes"
-            
-            cchs_df$phu_vs_prov <- as.factor(ifelse(cchs_df$GEODVHR4==input$phu,"phu","prov"))
-            
-            cchs_df$phu_vs_peer <- as.factor(ifelse(cchs_df$GEODVHR4==input$phu,"phu",ifelse(
-                cchs_df$GEODVPG==input$peer,"peer",NA)))
-            
-            svy_design <- 
-                survey::svrepdesign(
-                    data = cchs_df,
-                    weights = ~ FWGT,
-                    repweights = "BSW[0-9]+",
-                    type = "bootstrap",
-                    combined.weights = TRUE)
-            
-            svy_design <- 
-                survey::svrepdesign(
-                    data = cchs_df,
-                    weights = ~ FWGT,
-                    repweights = "BSW[0-9]+",
-                    type = "bootstrap",
-                    combined.weights = TRUE)
-            
-            svy_design_phu <- setup_design(in_data=cchs_filtered)
+            cchs_svy_peer <-
+                subset(cchs_svy, peer=="Yes")
             
             results <<- 
                 cchs_table(questions = in_questions,
-                           geo_vars = c("phu","peer","prov"),
+                           svy_design_phu = cchs_svy_phu, 
+                           svy_design_peer = cchs_svy_peer, 
+                           svy_design_prov = cchs_svy,
                            by_vars = in_byvars,
+                           crude = input$crude,
                            standardize=input$stand, stand_data=in_standdata, stand_pop=in_standpop, stand_var=in_standvar, 
-                           dataframe = cchs_filtered,
+                           dataframe = cchs_df,
                            update_progress = update_progress)
             
             clean_results <- 
-                dplyr::bind_rows(results) %>% 
-                dplyr::filter(variable != "CV")
+                dplyr::bind_rows(results) %>% dplyr::select(-CV) %>%
+                dplyr::mutate_at(c("Estimate", "Lower 95% CI", "Upper 95% CI"), ~round(., digits= 1))
             
-            if(input$stand==TRUE){
+            clean_wide <-
+                clean_results %>%
+                reshape2::melt(measure.vars=c("Estimate", "Lower 95% CI", "Upper 95% CI", "Quality Indicator"))
                 
-                clean_results <- 
-                    mutate(
-                        clean_results,
-                        standardized=ifelse(str_detect(variable, "Std"), "Yes", "No"),
-                        variable=str_replace(variable,"_Crude|_Std|Std ",""))
-                
-                if(!is.null(in_byvars)){
-                    clean_results <-
-                        dcast(clean_results, indicator + ind_level + stratifier + strat_level + standardized ~ geo_area + variable, value.var="value")
-                }
-                else {
-                    clean_results <-
-                        dcast(clean_results, indicator + ind_level + standardized ~ geo_area + variable, value.var="value") 
-                }
+            clean_wide <- 
+                mutate(
+                    clean_wide,
+                    variable=str_replace(variable,"_Crude|_Std|Std ",""))
+
+            if(!is.null(in_byvars)){
+                clean_wide <-
+                    dcast(clean_wide, est_type + indicator + ind_level + stratifier + strat_level ~ geo_area + variable, value.var="value") 
             }
-            
             else {
-                if(!is.null(in_byvars)){
-                    clean_results <-
-                        dcast(clean_results, indicator + ind_level + stratifier + strat_level ~ geo_area + variable, value.var="value") 
-                }
-                else {
-                    clean_results <-
-                        dcast(clean_results, indicator + ind_level ~ geo_area + variable, value.var="value")
-                }
+                clean_wide <-
+                    dcast(clean_wide, est_type + indicator + ind_level ~ geo_area + variable, value.var="value")
             }
             
-            clean_results <- 
-                mutate_at(
-                    clean_results, 
-                    vars(contains("Estimate"), contains("Lower 95% CI"), contains("Upper 95% CI")), ~round(as.numeric(.), 1)) %>%
-                mutate_at(
-                    vars(contains("Sample")), ~as.numeric(.)) %>%
-                select(Indicator="indicator", `Indicator Level`="ind_level", contains("phu"), contains("prov"), contains("peer"))
-            
+            clean_wide <<-
+                mutate(
+                    clean_wide, 
+                    `Significance Compared to Ontario`=ifelse(
+                        `phu_Lower 95% CI`>`prov_Upper 95% CI`, "Higher", ifelse(
+                            `phu_Upper 95% CI`< `prov_Lower 95% CI`, "Lower", "None" 
+                    )),
+                    `Significance Compared to Peer`=ifelse(
+                        `phu_Lower 95% CI`>`peer_Upper 95% CI`, "Higher", ifelse(
+                            `phu_Upper 95% CI`< `peer_Lower 95% CI`, "Lower", "None" 
+                        )),
+                    `phu_95% CI` = paste0(`phu_Lower 95% CI`,"-", `phu_Upper 95% CI`),
+                    `peer_95% CI` = paste0(`peer_Lower 95% CI`,"-", `peer_Upper 95% CI`),
+                    `prov_95% CI` = paste0(`prov_Lower 95% CI`,"-", `prov_Upper 95% CI`)
+                    ) %>%
+                select(-contains("Lower"), -contains("Upper")) %>%
+                select(`Estimate Type`="est_type", Indicator="indicator", `Indicator Level`="ind_level",
+                       phu_Estimate, `phu_95% CI`, `phu_Quality Indicator`,
+                       `Significance Compared to Ontario`, `Significance Compared to Peer`,
+                       peer_Estimate, `peer_95% CI`, `peer_Quality Indicator`, 
+                       prov_Estimate, `prov_95% CI`, `prov_Quality Indicator`) %>%
+                rename_all(~stringr::str_replace(., "phu_", paste0(input$phu_label," "))) %>%
+                rename_all(~stringr::str_replace(., "peer_", paste0("Peer Group ", stringr::str_sub(input$peer, -1, -1)," "))) %>%
+                rename_all(~stringr::str_replace(., "prov_", "ON "))
+                
             
             output$results_table <- renderDataTable({
-                clean_results
+                clean_wide
             })
         }, priority = -10)
+        
+        observe({
+        tablepath <- parseSavePath(volumes, input$save_table)
+        print(tablepath)
+        
+        if(length(tablepath$datapath)>0) {
+            
+            if(stringr::str_detect(tablepath$datapath, "xlsx")){
+                writexl::write_xlsx(clean_wide, tablepath$datapath)
+            }
+            if(stringr::str_detect(tablepath$datapath, "csv")){
+                write.csv(clean_wide, tablepath$datapath)
+            }
+            if(stringr::str_detect(tablepath$datapath, "rds")){
+                saveRDS(write.csv(clean_wide, tablepath$datapath))
+            }
+        }
+        })
+        
+          
+        
     })
 
 # Run the application 
