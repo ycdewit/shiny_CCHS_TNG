@@ -3,7 +3,7 @@ cchs_recode <-
   # recoding variables for analysis (mostly to dichotomous variables)
   recode_cchs <-
   # Reference/basis for most SDOH: http://www.ottawapublichealth.ca/en/reports-research-and-statistics/resources/Documents/mental_health_report_2018_en.pdf
-    mutate(dataframe,
+    dplyr::mutate(dataframe,
       rural=as.factor(GEODVUR2),
       education=as.factor(EHG2DVR3),
       sex=as.factor(DHH_SEX),
@@ -17,6 +17,15 @@ cchs_recode <-
                 "30-64",
                 "65+"
               ))),
+      agegrp_intermahp=
+        as.factor(
+          ifelse(
+            DHH_AGE<15, NA, ifelse(
+            DHH_AGE<=34, "15-34", ifelse(
+              DHH_AGE<=64, 
+              "35-64",
+              "65+"
+            )))),
       agegrp_4b=
         as.factor(
           ifelse(
@@ -44,7 +53,7 @@ cchs_recode <-
                 "65+"
               )))),
       agegrp_6= as.factor(
-        case_when(
+        dplyr::case_when(
           DHH_AGE<=19 ~ "12-19",
           DHH_AGE<=34 ~ "20-34",
           DHH_AGE<=49 ~ "35-49",
@@ -53,7 +62,7 @@ cchs_recode <-
           DHH_AGE>=80 ~ "80+")
       ),
       agegrp_5= as.factor(
-        case_when(
+        dplyr::case_when(
           DHH_AGE<=19 ~ "12-19",
           DHH_AGE<=34 ~ "20-34",
           DHH_AGE<=49 ~ "35-49",
@@ -61,7 +70,7 @@ cchs_recode <-
           DHH_AGE>=65 ~ "65+")
       ),
       agegrp_8= as.factor(
-        case_when(
+        dplyr::case_when(
           DHH_AGE<=19 ~ "12-19",
           DHH_AGE<=29 ~ "20-29",
           DHH_AGE<=39 ~ "30-39",
@@ -84,8 +93,8 @@ cchs_recode <-
                 "45-64",
                 "65+"
               )))),
-      ownhome=recode(DHH_OWN,`Owned by member of hhld, even if it is still being paid for`="Owned",`Rented, even if no cash rent is paid`="Rented"),
-      mothertongue=fct_collapse(SDCDVFL1,English=c("English","English and Other"),French=c("French","French and Other"),`English and French`=c("English and French","English, French and Other")),
+      ownhome=dplyr::recode(DHH_OWN,`Owned by member of hhld, even if it is still being paid for`="Owned",`Rented, even if no cash rent is paid`="Rented"),
+      mothertongue=forcats::fct_collapse(SDCDVFL1,English=c("English","English and Other"),French=c("French","French and Other"),`English and French`=c("English and French","English, French and Other")),
       livingsit=as.factor(ifelse(
         DHHDVLVG %in% c("Single parent living with children","Child living with a single parent","Child living with a single parent and siblings"),
         "Single parent and children",
@@ -101,10 +110,10 @@ cchs_recode <-
               ifelse(
                 DHHDVLVG=="Other","Other",NA)
               ))))),
-      gen_030_rev=fct_collapse(GEN_030,Strong=c("Very strong","Somewhat strong"), Weak=c("Somewhat weak","Very weak")),
-      gendvswl_rev=fct_collapse(GENDVSWL,Satisfied=c("Satisfied","Very Satisfied"), `Not Satified`=c("Neither satisfied nor dissatisfied","Dissatisfied","Very Dissatisfied")),
-      depdvsev_rev=fct_collapse(DEPDVSEV,`Moderate to severe depression`=c("Moderate depression","Moderately severe depression","Severe depression")),
-      dep=fct_collapse(depdvsev_rev,`Mild to severe depression`=c("Mild depression","Moderate to severe depression")),
+      gen_030_rev=forcats::fct_collapse(GEN_030,Strong=c("Very strong","Somewhat strong"), Weak=c("Somewhat weak","Very weak")),
+      gendvswl_rev=forcats::fct_collapse(GENDVSWL,Satisfied=c("Satisfied","Very Satisfied"), `Not Satified`=c("Neither satisfied nor dissatisfied","Dissatisfied","Very Dissatisfied")),
+      depdvsev_rev=forcats::fct_collapse(DEPDVSEV,`Moderate to severe depression`=c("Moderate depression","Moderately severe depression","Severe depression")),
+      dep=forcats::fct_collapse(depdvsev_rev,`Mild to severe depression`=c("Mild depression","Moderate to severe depression")),
       smk_agefirst=as.factor(ifelse(
         SMK_035<=15, "15 or less", ifelse(
           SMK_035<=17, "16-17", ifelse(
@@ -157,20 +166,19 @@ cchs_recode <-
           flag_preg_bf == "Yes", NA, ifelse(
             alc_exceedlowrisk1=="Yes"|alc_exceedlowrisk2=="Yes","Yes",ifelse(is.na(alc_exceedlowrisk1) | is.na(alc_exceedlowrisk2), NA, "No")))),
       alc_heavy = ifelse(ALC_010 == "Yes" & ALC_005 == "Yes", ifelse(
-        str_detect(ALC_020,"Never|Less than once"),"No", "Yes"),"No"),
+        stringr::str_detect(ALC_020,"Never|Less than once"),"No", "Yes"),"No"),
       alc_underage = ifelse(DHH_AGE<19, ifelse(ALC_005=="Yes", ifelse(ALC_010=="Yes","Yes","No"), "No"), NA),
       alc_bingecat = as.factor(ifelse(
-          flag_preg_bf == "Yes", NA, ifelse(
             !is.na(ALC_020), ifelse(
               ALC_020 == "Never", "No binge drinking in past year", ifelse(
                 ALC_020 == "Less than once a month", "Less than once a month", "Once a month or more")), 
             ifelse(
-              ALC_005 == "No"|ALC_010 == "No", "Did not drink in the past year", NA)))),
+              ALC_005 == "No"|ALC_010 == "No", "Did not drink in the past year", NA))),
       alc_status = 
-        as.factor(ifelse(
-          flag_preg_bf == "Yes", NA, ALCDVTTM
-          ))
-          ,
+        as.factor(
+          ifelse(
+              ALC_005=="No", "Never", ifelse(
+                  ALC_005=="Yes", ifelse(ALC_010=="No", "Former", ifelse(ALC_010=="Yes", "Current", NA)), NA))),
       alc_freq =
         as.factor(ifelse(
           flag_preg_bf == "Yes", NA, ifelse(
@@ -212,33 +220,33 @@ cchs_recode <-
       sui_attempt=as.factor(ifelse(SUI_005=="No","No",SUI_035)),
       sui_medatt=as.factor(ifelse(SUI_005=="No","No",SUI_055)),
       sui_con_age=ifelse(SUI_010=="Yes",DHH_AGE,SUI_015),
-      sui_con_agegrp=as.factor(case_when(
+      sui_con_agegrp=as.factor(dplyr::case_when(
         sui_con_age<29 ~ "15-29",
         sui_con_age<49 ~ "30-49",
         sui_con_age<64 ~ "50-64",
         sui_con_age<91 ~ "65+")),
       sui_plan_age=ifelse(SUI_025=="Yes",DHH_AGE,SUI_015),
-      sui_plan_agegrp=as.factor(case_when(
+      sui_plan_agegrp=as.factor(dplyr::case_when(
         sui_plan_age<29 ~ "15-29",
         sui_plan_age<49 ~ "30-49",
         sui_plan_age<64 ~ "50-64",
         sui_plan_age<91 ~ "65+")),
       sui_attempt_age=ifelse(SUI_045=="Yes",DHH_AGE,SUI_015),
-      sui_attempt_agegrp=as.factor(case_when(
+      sui_attempt_agegrp=as.factor(dplyr::case_when(
         sui_attempt_age<29 ~ "15-29",
         sui_attempt_age<49 ~ "30-49",
         sui_attempt_age<64 ~ "50-64",
-        sui_attempt_age<91 ~ "65+")),
+        sui_attempt_age<91 ~ "65+"))
       )
   
   recode_cchs1 <-
-    mutate_at(recode_cchs, c("GEN_005","GEN_015","GENDVHDI","GENDVMHI"),list(rev = ~fct_collapse(., `Very good or excellent`=c("Very good","Excellent"), `Not very good`=c("Good","Fair","Poor"))))
+    dplyr::mutate_at(recode_cchs, c("GEN_005","GEN_015","GENDVHDI","GENDVMHI"),list(rev = ~forcats::fct_collapse(., `Very good or excellent`=c("Very good","Excellent"), `Not very good`=c("Good","Fair","Poor"))))
   
   recode_cchs2 <-    
-    mutate_at(recode_cchs1, c("GEN_020","GEN_025"), list(rev = ~ fct_collapse(., `Stressful`=c("Quite a bit stressful","Extremely stressful"), `Not stressful`=c("A bit stressful","Not very stressful","Not at all stressful"))))
+    dplyr::mutate_at(recode_cchs1, c("GEN_020","GEN_025"), list(rev = ~ forcats::fct_collapse(., `Stressful`=c("Quite a bit stressful","Extremely stressful"), `Not stressful`=c("A bit stressful","Not very stressful","Not at all stressful"))))
   
   cchs_recode <-
-    rename_at(recode_cchs2, vars(contains("_rev")), ~str_to_lower(.))
+    dplyr::rename_at(recode_cchs2, dplyr::vars(dplyr::contains("_rev")), ~stringr::str_to_lower(.))
   
   return(cchs_recode) 
 }

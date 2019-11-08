@@ -1,7 +1,7 @@
 cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_prov, questions, 
-                             by_vars=NULL, crude=TRUE, standardize=FALSE, 
-                             stand_var=NULL, stand_data=NULL, stand_pop=NULL, update_progress=NULL){
-
+                       by_vars=NULL, crude=TRUE, standardize=FALSE, 
+                       stand_var=NULL, stand_data=NULL, stand_pop=NULL, update_progress=NULL){
+  
   qnum <- 0
   
   geo_vars <- c("phu", "peer", "prov")
@@ -30,7 +30,9 @@ cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_pr
       if (is.function(update_progress)) {
         update_progress(detail = paste0("Running ", geo_var, " estimates for question ", qnum, ": ", question, "."))
       }
-    
+      
+      if (!question %in% names(cchs_survey[["variables"]]))
+      
       question <- rlang::sym(question)
       
       if(is.numeric(cchs_survey[["variables"]][[as.name(question)]])){
@@ -49,13 +51,13 @@ cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_pr
       if(!is.null(by_vars)){
         
         by_n <- lapply(setNames(by_vars, by_vars), function(by_col) {
-          if(!is.factor(df_filtered[[as.name(by_col)]])){
-            df_filtered[[as.name(by_col)]] <- as.factor(is.df_filtered[[as.name(by_col)]])
-          }
           if(is.numeric(cchs_survey[["variables"]][[as.name(question)]])){
             freqdf <- as.data.frame(table(df_filtered[which(!is.na(df_filtered[[as.name(question)]])), by_col]))
             names(freqdf) <- c("strat_level", "Sample Size")
             freqdf <- cbind(stratifier=by_col, ind_level="Mean", freqdf)
+          }
+          else if(!is.factor(df_filtered[[as.name(by_col)]])){
+            df_filtered[[as.name(by_col)]] <- as.factor(df_filtered[[as.name(by_col)]])
           }
           else{
             freqdf <- as.data.frame(table(df_filtered[[as.name(question)]],df_filtered[[as.name(by_col)]]))
@@ -64,7 +66,7 @@ cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_pr
           }
           return(freqdf)
         })
-          
+        
         by_n <- dplyr::bind_rows(by_n)
         
         by_n$stratifier <- as.factor(by_n$stratifier)
@@ -74,7 +76,7 @@ cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_pr
       
       if (crude == TRUE) {
         
-       out_crude  <- cchs_est(svy_design=cchs_survey, question=question)
+        out_crude  <- cchs_est(svy_design=cchs_survey, question=question)
         
         out_crude$est_type <- "crude"
         
