@@ -1,3 +1,8 @@
+## TO DO:
+## 1. Fix line 229 - doesn't currently work
+## 2. Make specific to 2015+
+
+
 cchs_recode <-
   function (dataframe) {
   # recoding variables for analysis (mostly to dichotomous variables)
@@ -112,8 +117,6 @@ cchs_recode <-
               ))))),
       gen_030_rev=forcats::fct_collapse(GEN_030,Strong=c("Very strong","Somewhat strong"), Weak=c("Somewhat weak","Very weak")),
       gendvswl_rev=forcats::fct_collapse(GENDVSWL,Satisfied=c("Satisfied","Very Satisfied"), `Not Satified`=c("Neither satisfied nor dissatisfied","Dissatisfied","Very Dissatisfied")),
-      depdvsev_rev=forcats::fct_collapse(DEPDVSEV,`Moderate to severe depression`=c("Moderate depression","Moderately severe depression","Severe depression")),
-      dep=forcats::fct_collapse(depdvsev_rev,`Mild to severe depression`=c("Mild depression","Moderate to severe depression")),
       smk_agefirst=as.factor(ifelse(
         SMK_035<=15, "15 or less", ifelse(
           SMK_035<=17, "16-17", ifelse(
@@ -127,9 +130,6 @@ cchs_recode <-
             SMK_040<=20, "18-20", "21+"
           )
         )
-      )),
-      ets_nonsmkr=as.factor(ifelse(
-        SMK_005=="Not at all", as.character(ETS_005), NA
       )),
       smk_status3=
         as.factor(
@@ -214,29 +214,7 @@ cchs_recode <-
               drg_045_rev=="No",ifelse(
                 drg_055_rev=="No",ifelse(
                   drg_065_rev=="No",ifelse(
-                    drg_075_rev=="No", "No", NA), NA), NA), NA), NA), NA))),
-      sui_con_1yr=as.factor(ifelse(SUI_005=="No","No",SUI_010)),
-      sui_plan=as.factor(ifelse(SUI_005=="No","No",SUI_020)),
-      sui_attempt=as.factor(ifelse(SUI_005=="No","No",SUI_035)),
-      sui_medatt=as.factor(ifelse(SUI_005=="No","No",SUI_055)),
-      sui_con_age=ifelse(SUI_010=="Yes",DHH_AGE,SUI_015),
-      sui_con_agegrp=as.factor(dplyr::case_when(
-        sui_con_age<29 ~ "15-29",
-        sui_con_age<49 ~ "30-49",
-        sui_con_age<64 ~ "50-64",
-        sui_con_age<91 ~ "65+")),
-      sui_plan_age=ifelse(SUI_025=="Yes",DHH_AGE,SUI_015),
-      sui_plan_agegrp=as.factor(dplyr::case_when(
-        sui_plan_age<29 ~ "15-29",
-        sui_plan_age<49 ~ "30-49",
-        sui_plan_age<64 ~ "50-64",
-        sui_plan_age<91 ~ "65+")),
-      sui_attempt_age=ifelse(SUI_045=="Yes",DHH_AGE,SUI_015),
-      sui_attempt_agegrp=as.factor(dplyr::case_when(
-        sui_attempt_age<29 ~ "15-29",
-        sui_attempt_age<49 ~ "30-49",
-        sui_attempt_age<64 ~ "50-64",
-        sui_attempt_age<91 ~ "65+"))
+                    drg_075_rev=="No", "No", NA), NA), NA), NA), NA), NA)))
       )
   
   recode_cchs1 <-
@@ -247,6 +225,38 @@ cchs_recode <-
   
   cchs_recode <-
     dplyr::rename_at(recode_cchs2, dplyr::vars(dplyr::contains("_rev")), ~stringr::str_to_lower(.))
+  
+  if(c("2015", "2016") %in% levels(cchs_recode$ADM_YOI)){
+    cchs_recode <- cchs_recode %>% mutate(
+      depdvsev_rev=forcats::fct_collapse(DEPDVSEV,`Moderate to severe depression`=c("Moderate depression","Moderately severe depression","Severe depression")),
+      dep=forcats::fct_collapse(depdvsev_rev,`Mild to severe depression`=c("Mild depression","Moderate to severe depression")),
+      ets_nonsmkr=as.factor(ifelse(
+      SMK_005=="Not at all", as.character(ETS_005), NA
+    )),
+    sui_con_1yr=as.factor(ifelse(SUI_005=="No","No",SUI_010)),
+    sui_plan=as.factor(ifelse(SUI_005=="No","No",SUI_020)),
+    sui_attempt=as.factor(ifelse(SUI_005=="No","No",SUI_035)),
+    sui_medatt=as.factor(ifelse(SUI_005=="No","No",SUI_055)),
+    sui_con_age=ifelse(SUI_010=="Yes",DHH_AGE,SUI_015),
+    sui_con_agegrp=as.factor(dplyr::case_when(
+      sui_con_age<29 ~ "15-29",
+      sui_con_age<49 ~ "30-49",
+      sui_con_age<64 ~ "50-64",
+      sui_con_age<91 ~ "65+")),
+    sui_plan_age=ifelse(SUI_025=="Yes",DHH_AGE,SUI_015),
+    sui_plan_agegrp=as.factor(dplyr::case_when(
+      sui_plan_age<29 ~ "15-29",
+      sui_plan_age<49 ~ "30-49",
+      sui_plan_age<64 ~ "50-64",
+      sui_plan_age<91 ~ "65+")),
+    sui_attempt_age=ifelse(SUI_045=="Yes",DHH_AGE,SUI_015),
+    sui_attempt_agegrp=as.factor(dplyr::case_when(
+      sui_attempt_age<29 ~ "15-29",
+      sui_attempt_age<49 ~ "30-49",
+      sui_attempt_age<64 ~ "50-64",
+      sui_attempt_age<91 ~ "65+"))
+    )
+  }
   
   return(cchs_recode) 
 }

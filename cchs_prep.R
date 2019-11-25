@@ -57,7 +57,7 @@ cchs_prep <-
     }
     
     else if (grepl(".csv", cchsfile, ignore.case=TRUE) == TRUE) {
-      hs1516 <- utils::read.csv(cchsfile)
+      cchs <- utils::read.csv(cchsfile)
       if (is.function(update_progress)) {
         update_progress(detail = "Data import")
       }
@@ -67,16 +67,20 @@ cchs_prep <-
       stop("cchsfile must be a filepath to a STATA, SPSS, R, Excel, or Comma-separated data file (i.e. with a .dta, .sav, .rds, .xlsx, or .csv file extension)")
     }
     
-    hs1516 <- dplyr::rename_all(hs1516, ~stringr::str_to_upper(.))
+    cchs <- dplyr::rename_all(cchs, ~stringr::str_to_upper(.))
+    cchs$cycle <- substr(cchs$ONT_ID, 1, 4)
+    if(is.factor(cchs$ADM_YOI)) {
+      cchs$ADM_YOI <- as.numeric(cchs$cycle)
+    } 
     
     if(run_errata==TRUE) {
-      cchs_indata <- cchs_errata(dataframe = hs1516) 
+      cchs_indata <- cchs_errata(dataframe = cchs) 
       if (is.function(update_progress)) {
         update_progress(detail = "Errata")
       }
     }
     else {
-      cchs_indata <- hs1516
+      cchs_indata <- cchs
     }
     
     cchs_clean <- cchs_cleanup(dataframe = cchs_indata)

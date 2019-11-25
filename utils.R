@@ -1,5 +1,15 @@
 scale100 <- function(x){x*100}
 
+mutate_when <- function(data, ...) {
+  dots <- eval(substitute(alist(...)))
+  for (i in seq(1, length(dots), by = 2)) {
+    condition <- eval(dots[[i]], envir = data)
+    mutations <- eval(dots[[i + 1]], envir = data[condition, , drop = FALSE])
+    data[condition, names(mutations)] <- mutations
+  }
+  data
+}
+
 cchs_can2011 <- function(minage=NULL, maxage=NULL, agegrp_starts=NULL, agegrp_ends=NULL, agegrp_names=NULL) {
   
   stdpop <- c(376321, 	379990, 	383179, 	383741, 	375833, 	366757, 	361038, 	363440, 	358621, 	360577, 	
@@ -74,6 +84,10 @@ cchs_est <- function(svy_design, question) {
     question <- as.symbol(question)
   }
   
+  if(is.character(svy_design[["variables"]][[as.name(question)]])){
+    svy_design[["variables"]][[as.name(question)]] <- as.factor(svy_design[["variables"]][[as.name(question)]])
+  }
+  
   wgt_est <- survey::svymean(as.formula(paste0("~", as.name(question))), svy_design)
   
   combine <- 
@@ -87,8 +101,6 @@ cchs_est <- function(svy_design, question) {
                   `Upper 95% CI` = "97.5 %")
   
   cleanup1 <- dplyr::select(cleanup,-SE)
-  
-  print(is.numeric(svy_design[["variables"]][[as.name(question)]]))
   
   if(is.numeric(svy_design[["variables"]][[as.name(question)]])) {
     clean_out <- dplyr::mutate(cleanup1, CV=CV*100)
@@ -129,14 +141,24 @@ cchs_estby <- function(svy_design, by_vars, question) {
       if(is.function(update_progress)) {
       update_progress(detail = paste0("Running question ", qnum, "(", question, ") for ", geo_var, 
                                                       "by stratifier", bynum,":", by_var))
-    }}
+      }
+    }
+    
+    if(!is.factor(svy_design[["variables"]][[as.name(by_var)]])){
+      svy_design[["variables"]][[as.name(by_var)]] <- as.factor(svy_design[["variables"]][[as.name(by_var)]])
+    }
+    
+    print(str(svy_design[["variables"]][[as.name(by_var)]]))
+    
+    if(is.character(svy_design[["variables"]][[as.name(question)]])){
+      svy_design[["variables"]][[as.name(question)]] <- as.factor(svy_design[["variables"]][[as.name(question)]])
+    }
   
     wgt_est <- 
       as.data.frame(
         survey::svyby(as.formula(paste0("~", question)),as.formula(paste0("~", by_var)), svy_design, 
                       survey::svymean, vartype = c("ci","cv")))
-    print(wgt_est)
-    
+
     if(is.numeric(svy_design[["variables"]][[as.name(question)]])){
       wgt_est_clean <- dplyr::mutate_at(wgt_est, dplyr::vars(dplyr::contains("cv")), scale100)
     }
@@ -150,7 +172,6 @@ cchs_estby <- function(svy_design, by_vars, question) {
     wgt_est_clean1 <- dplyr::rename_at(wgt_est_clean, dplyr::vars(dplyr::contains(rlang::quo_name(question))),stringr::str_replace,rlang::quo_name(question),"est_")
     
     clean <- reshape2::melt(wgt_est_clean1, id.vars = c("strat_level"))
-    print(clean)
     
     if(is.numeric(svy_design[["variables"]][[as.name(question)]])){
       clean$ind_level="Mean"}
@@ -169,10 +190,9 @@ cchs_estby <- function(svy_design, by_vars, question) {
       )
     
     clean <- dplyr::select(clean, -variable)
-    print(clean)
-    
+
     ready <- reshape2::dcast(clean, ind_level+strat_level~measure)
-    print(ready)
+    
     ready$stratifier <- rlang::quo_name(by_var)
     
     ready$`Quality Indicator` <-
@@ -196,6 +216,7 @@ cchs_estby <- function(svy_design, by_vars, question) {
       output <- ready
     }
     else output <- {dplyr::bind_rows(output, ready)}
+    print(output)
   }
   clean_out <- dplyr::filter(output, ind_level != "(Missing)", strat_level != "(Missing)")
   clean_out <- dplyr::mutate_if(clean_out, is.character, ~as.factor(.))

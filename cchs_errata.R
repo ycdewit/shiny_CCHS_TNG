@@ -6,6 +6,11 @@
 
 ### SET YOUR INPUT FILE (replace "your_file" with name of your file)
 # You can either use this code to set your input cchs file or find and replace "cchs_input" with your file name
+
+## TO DO:
+## 1. Make specific to cycle (e.g. this only runs for 1516)
+## 2. Add errata 6 for 2015 only
+
 cchs_errata <- function(dataframe) {
 
 cchs_input <- dataframe
