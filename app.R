@@ -78,31 +78,31 @@ ui <- fluidPage(
                                     strong("Set Age Group"), br(),
                                     em("Specify the age group for age-standardization"),
                                     splitLayout(
-                                        textInput("ag_name1", "Name", "", width="90%"),
+                                        textInput("ag_name1", "Name", "12-19", width="90%"),
                                         numericInput("ag_start1","Start Age", value=12, min=12, max=105, width="90%"), 
                                         numericInput("ag_end1","End Age", value=19, min=12, max=105, width="90%")))),
                             hidden(
                                 div(id="std_ag2",
                                     splitLayout(
-                                        textInput("ag_name2", NULL, "", width="90%"),
+                                        textInput("ag_name2", NULL, "20-34", width="90%"),
                                         numericInput("ag_start2", NULL, value=20, min=12, max=105, width="90%"), 
                                         numericInput("ag_end2", NULL, value=34, min=12, max=105, width="90%")))),
                             hidden(
                                 div(id="std_ag3",
                                     splitLayout(
-                                        textInput("ag_name3", NULL, "", width="90%"),
+                                        textInput("ag_name3", NULL, "35-49", width="90%"),
                                         numericInput("ag_start3", NULL, value=35, min=12, max=105, width="90%"), 
                                         numericInput("ag_end3", NULL, value=49, min=12, max=105, width="90%")))),
                             hidden(
                                 div(id="std_ag4",
                                     splitLayout(
-                                        textInput("ag_name4", NULL, "", width="90%"),
+                                        textInput("ag_name4", NULL, "50-64", width="90%"),
                                         numericInput("ag_start4", NULL, value=50, min=12, max=105, width="90%"), 
                                         numericInput("ag_end4", NULL, value=64, min=12, max=105, width="90%")))),
                             hidden(
                                 div(id="std_ag5",
                                     splitLayout(
-                                        textInput("ag_name5", NULL, "", width="90%"),
+                                        textInput("ag_name5", NULL, "65+", width="90%"),
                                         numericInput("ag_start5", NULL, value=65, min=12, max=105, width="90%"), 
                                         numericInput("ag_end5", NULL, value=105, min=12, max=105, width="90%")))),
                             hidden(
@@ -154,7 +154,6 @@ ui <- fluidPage(
                          DT::dataTableOutput("cchs_df")),
                 tabPanel(
                     "Table", 
-                    verbatimTextOutput("test_qs"),
                     DT::dataTableOutput("results_table")
                 ),
                 tabPanel("Graph") 
@@ -483,49 +482,15 @@ server <-
                            by_vars = in_byvars,
                            crude = input$crude,
                            standardize=input$stand, stand_data=in_standdata, stand_pop=in_standpop, stand_var=in_standvar, 
-                           dataframe = cchs_filtered,
-                           update_progress = update_progress)
+                           dataframe = cchs_ready,
+                           update_progress = update_progress) 
             
-            clean_results <- 
-                dplyr::bind_rows(results) %>% 
-                dplyr::filter(variable != "CV")
-            
-            if(input$stand==TRUE){
-                
-                clean_results <- 
-                    mutate(
-                        clean_results,
-                        standardized=ifelse(str_detect(variable, "Std"), "Yes", "No"),
-                        variable=str_replace(variable,"_Crude|_Std|Std ",""))
-                
-                if(!is.null(in_byvars)){
-                    clean_results <-
-                        dcast(clean_results, indicator + ind_level + stratifier + strat_level + standardized ~ geo_area + variable, value.var="value")
-                }
-                else {
-                    clean_results <-
-                        dcast(clean_results, indicator + ind_level + standardized ~ geo_area + variable, value.var="value") 
-                }
-            }
-            
-            else {
-                if(!is.null(in_byvars)){
-                    clean_results <-
-                        dcast(clean_results, indicator + ind_level + stratifier + strat_level ~ geo_area + variable, value.var="value") 
-                }
-                else {
-                    clean_results <-
-                        dcast(clean_results, indicator + ind_level ~ geo_area + variable, value.var="value")
-                }
-            }
-            
-            clean_results <- 
+            clean_results <-
+                mutate_at(results,
+                    vars(contains("Estimate"), contains("Lower 95% CI"), contains("Upper 95% CI"), contains("CV")), ~round(as.numeric(.), 1)) %>%
                 mutate_at(
-                    clean_results, 
-                    vars(contains("Estimate"), contains("Lower 95% CI"), contains("Upper 95% CI")), ~round(as.numeric(.), 1)) %>%
-                mutate_at(
-                    vars(contains("Sample")), ~as.numeric(.)) %>%
-                select(Indicator="indicator", `Indicator Level`="ind_level", contains("phu"), contains("prov"), contains("peer"))
+                    vars(contains("Sample"), ~as.numeric(.)))
+                #select(Indicator="indicator", `Indicator Level`="ind_level", contains("phu"), contains("prov"), contains("peer"))
             
             
             output$results_table <- renderDataTable({
