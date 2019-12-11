@@ -17,12 +17,12 @@
 #' @examples
 #' cchs <-
 #'    cchs_prep(
-#'       cchsfile = "/data/hs1516_on_distr.dta",
-#'       bootwts = "/data/hs1516_on_bootwt.dta")
+#'       cchsfile = "/data/cchs_on_distr.dta",
+#'       bootwts = "/data/cchs_on_bootwt.dta")
 #'
 #' cchs_combined <-
 #'    cchs_prep(
-#'       cchsfile = cchs1516,
+#'       cchsfile = cccchs,
 #'       inclues_bootwts = TRUE,
 #'       run_errata = FALSE)
 #' @export
@@ -30,7 +30,7 @@
 
 cchs_prep <-
   function (cchsfile, includes_bootwts=FALSE, bootwts=NULL, run_errata=TRUE, update_progress=NULL) {
-
+    
     if (grepl(".dta", cchsfile, ignore.case=TRUE) == TRUE) {
       hs1516 <- foreign::read.dta(cchsfile)
       if (is.function(update_progress)) {
@@ -57,7 +57,7 @@ cchs_prep <-
     }
     
     else if (grepl(".csv", cchsfile, ignore.case=TRUE) == TRUE) {
-      cchs <- utils::read.csv(cchsfile)
+      hs1516 <- utils::read.csv(cchsfile)
       if (is.function(update_progress)) {
         update_progress(detail = "Data import")
       }
@@ -67,20 +67,16 @@ cchs_prep <-
       stop("cchsfile must be a filepath to a STATA, SPSS, R, Excel, or Comma-separated data file (i.e. with a .dta, .sav, .rds, .xlsx, or .csv file extension)")
     }
     
-    cchs <- dplyr::rename_all(cchs, ~stringr::str_to_upper(.))
-    cchs$cycle <- substr(cchs$ONT_ID, 1, 4)
-    if(is.factor(cchs$ADM_YOI)) {
-      cchs$ADM_YOI <- as.numeric(cchs$cycle)
-    } 
+    hs1516 <- dplyr::rename_all(hs1516, ~stringr::str_to_upper(.))
     
     if(run_errata==TRUE) {
-      cchs_indata <- cchs_errata(dataframe = cchs) 
+      cchs_indata <- cchs_errata(dataframe = hs1516) 
       if (is.function(update_progress)) {
         update_progress(detail = "Errata")
       }
     }
     else {
-      cchs_indata <- cchs
+      cchs_indata <- hs1516
     }
     
     cchs_clean <- cchs_cleanup(dataframe = cchs_indata)
@@ -88,7 +84,7 @@ cchs_prep <-
     if (is.function(update_progress)) {
       update_progress(detail = "Basic cleaning")
     }
-
+    
     if (includes_bootwts == FALSE){
       if (grepl(".dta", bootwts, ignore.case=TRUE) == TRUE) {
         hs1516_bootwt <- foreign::read.dta(bootwts)
@@ -127,10 +123,10 @@ cchs_prep <-
       else {
         stop("If includes_bootwts is TRUE, bootwts must be a filepath to a STATA, SPSS, R, Excel, or Comma-separated data file (i.e. with a .dta, .sav, .rds, .xlsx, or .csv file extension)")
       }
-    
-    hs1516_bootwt <- dplyr::rename_all(hs1516_bootwt, ~stringr::str_to_upper(.))    
-    cchs_output <- dplyr::left_join(cchs_clean, hs1516_bootwt, by = c("ONT_ID"))
-    
+      
+      hs1516_bootwt <- dplyr::rename_all(hs1516_bootwt, ~stringr::str_to_upper(.))    
+      cchs_output <- dplyr::left_join(cchs_clean, hs1516_bootwt, by = c("ONT_ID"))
+      
     }
     
     else {
@@ -143,5 +139,3 @@ cchs_prep <-
     }
     return(cchs_output)
   }
-  
-
