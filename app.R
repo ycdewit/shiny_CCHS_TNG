@@ -142,7 +142,7 @@ ui <- fluidPage(
                     em("This is for restricting analyses to specific groups (e.g. adults 18+)"),
                     sliderInput("age_range", label = "Age Range", min = 10, 
                                 max = 105, value = c(12, 105), step = 1),
-                    actionButton("submit_analysis", "Run", width = "100%")
+                    actionButton("submit_analysis", "Run - click once and switch to Table tab", width = "100%")
                 )
             )
         ),
@@ -154,9 +154,9 @@ ui <- fluidPage(
                          DT::dataTableOutput("cchs_df")),
                 tabPanel(
                     "Table", 
+                    shinySaveButton("save_table", label="Export Table", title=NULL, filename = "output", filetype=list(data=c('xlsx', 'csv'))),
                     DT::dataTableOutput("results_table")
-                ),
-                tabPanel("Graph") 
+                ) 
             )
         )
     )
@@ -173,7 +173,7 @@ server <-
         volumes <- c(Home = fs::path_home(), "R Installation" = R.home(), getVolumes()())
         shinyFileChoose(input, "hs_file", roots = c(volumes, "wd"="."), defaultRoot = "wd", session = session)
         shinyFileChoose(input, "bs_file", roots = volumes, session = session)
-        shinyFileSave(input, "save", roots = volumes, session = session, restrictions = system.file(package = "base"))
+        shinyFileSave(input, "save_table", roots = volumes, session = session, restrictions = system.file(package = "base"))
         
         #Previous data    
         observe({    
@@ -258,7 +258,7 @@ server <-
             if (2 %in% input$clean_options){
                 update_progress(detail = "Calculating additional variables")
                 source("cchs_recode.R")
-                cchs_df <- cchs_recode(cchs_df)
+                cchs_df <<- cchs_recode(cchs_df)
                 update_progress(detail = "Finishing up")
             }
             
@@ -487,16 +487,29 @@ server <-
             
             clean_results <-
                 mutate_at(results,
-                    vars(contains("Estimate"), contains("Lower 95% CI"), contains("Upper 95% CI"), contains("CV")), ~round(as.numeric(.), 1)) %>%
+                          vars(contains("Estimate"), contains("Lower 95% CI"), contains("Upper 95% CI"), contains("CV")), list(~round(as.numeric(.), 1))) %>%
                 mutate_at(
-                    vars(contains("Sample"), ~as.numeric(.)))
-                #select(Indicator="indicator", `Indicator Level`="ind_level", contains("phu"), contains("prov"), contains("peer"))
-            
+                    vars(contains("Sample")), list(~as.numeric(.))) %>%
+                select(Indicator="indicator", `Indicator Level`="ind_level", contains("phu"), contains("prov"), contains("peer"))
             
             output$results_table <- renderDataTable({
                 clean_results
             })
         }, priority = -10)
+        
+        observe({
+            outfile <- parseSavePath(volumes, input$save_table)$datapath
+            print(outfile)
+            print(length(outfile))
+            if(length(outfile) > 0) { 
+                if(grepl(".xlsx", outfile, ignore.case=TRUE) == TRUE) {
+                writexl::write_xlsx(clean_results, outfile)
+                }
+                else{
+                write.csv(clean_results, outfile)
+                }
+            }
+        })
     })
 
 # Run the application 

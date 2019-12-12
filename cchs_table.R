@@ -17,13 +17,19 @@ cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_pr
     
     if(geo_var=="phu") {
       survey <- svy_design_phu
+      geo_data <- dplyr::filter(dataframe, phu=="Yes")
     }
     
     else if(geo_var=="peer") {
       survey <- svy_design_peer
+      geo_data <- dplyr::filter(dataframe, peer=="Yes")
     }
     
-    else survey <- svy_design_prov
+    else {
+      survey <- svy_design_prov
+      geo_data <- dataframe
+      }
+    
     
     output_list <- lapply(setNames(questions,questions), function(question) {
       
@@ -44,13 +50,13 @@ cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_pr
       cchs_survey <- subset(survey, !is.na(eval(question)))
       
       if(is.numeric(cchs_survey[["variables"]][[as.name(question)]])){
-        n_sample <- length(which(!is.na(dataframe[[as.name(question)]])))
+        n_sample <- length(which(!is.na(geo_data[[as.name(question)]])))
         raw_n <- data.frame("Mean", n_sample)
         names(raw_n) <- c("ind_level", "Sample Size")
       }
       
       else{
-        raw_n <- as.data.frame(table(dataframe[[as.name(question)]]))
+        raw_n <- as.data.frame(table(geo_data[[as.name(question)]]))
         names(raw_n) <- c("ind_level", "Sample Size")
         raw_n <- raw_n[which(raw_n$ind_level!="Valid skip"),]
       }
@@ -59,15 +65,15 @@ cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_pr
         
         by_n <- lapply(setNames(by_vars, by_vars), function(by_col) {
           if(is.numeric(cchs_survey[["variables"]][[as.name(question)]])){
-            freqdf <- as.data.frame(table(dataframe[which(!is.na(dataframe[[as.name(question)]])), by_col]))
+            freqdf <- as.data.frame(table(geo_data[which(!is.na(geo_data[[as.name(question)]])), by_col]))
             names(freqdf) <- c("strat_level", "Sample Size")
             freqdf <- cbind(stratifier=by_col, ind_level="Mean", freqdf)
           }
-          else if(!is.factor(dataframe[[as.name(by_col)]])){
-            dataframe[[as.name(by_col)]] <- as.factor(dataframe[[as.name(by_col)]])
+          else if(!is.factor(geo_data[[as.name(by_col)]])){
+            geo_data[[as.name(by_col)]] <- as.factor(geo_data[[as.name(by_col)]])
           }
           else{
-            freqdf <- as.data.frame(table(dataframe[[as.name(question)]],dataframe[[as.name(by_col)]]))
+            freqdf <- as.data.frame(table(geo_data[[as.name(question)]],geo_data[[as.name(by_col)]]))
             names(freqdf) <- c("ind_level", "strat_level", "Sample Size")
             freqdf <- cbind(stratifier=by_col, freqdf)
           }
@@ -103,7 +109,7 @@ cchs_table <- function(dataframe, svy_design_phu, svy_design_peer, svy_design_pr
         if(is.null(stand_data)|is.null(stand_pop)|is.null(stand_var)){
           stop("If standardize=TRUE then stand_data, stand_pop, and stand_var arguments must be specified")}
         
-        base <- data.frame(Var1=levels(dataframe[[stand_var]]))
+        base <- data.frame(Var1=levels(geo_data[[stand_var]]))
         base[[as.name(stand_var)]] <- as.factor(base$Var1)
         
         std_pop_data <- dplyr::left_join(base, stand_data)
