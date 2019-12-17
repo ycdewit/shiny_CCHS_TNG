@@ -1,4 +1,4 @@
-package_list <- c("shiny", "shinyFiles", "shinyjs", "readxl", "foreign", "dplyr", "tibble", "stringr", "DT", "forcats", "reshape2", "survey")
+package_list <- c("shiny", "shinyFiles", "shinyjs", "readxl", "foreign", "dplyr", "tibble", "stringr", "DT", "forcats", "reshape2", "survey", "writexl")
 
 get_packages <- function (packages) {
     for(package in packages) {
@@ -503,7 +503,7 @@ server <-
             print(length(outfile))
             if(length(outfile) > 0) { 
                 if(grepl(".xlsx", outfile, ignore.case=TRUE) == TRUE) {
-                writexl::write_xlsx(clean_results, outfile)
+                write_xlsx(clean_results, outfile)
                 }
                 else{
                 write.csv(clean_results, outfile)
